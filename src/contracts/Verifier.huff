@@ -53,13 +53,14 @@
     // Return stack:       []
 }
 
-/// @param `g1_point_ptr` - Memory pointer to the input point
+/// @param `ptr` - Memory pointer to the input point
 /// @dev Writes the negation of the passed point to memory at `ptr`
-#define macro NEGATE(ptr) = takes (1) {
-    // Input stack:        [g1_point_ptr]
+#define macro NEGATE(ptr) = {
+    // Input stack:        []
 
-    dup1 mload          // [p_x, q, g1_point_ptr]
-    dup3 0x20 add      // [g1_point_ptr + 0x20, p_x, g1_point_ptr]
+    <ptr>               // [g1_point_ptr]
+    dup1 mload          // [p_x, g1_point_ptr]
+    dup2 0x20 add       // [g1_point_ptr + 0x20, p_x, g1_point_ptr]
     mload               // [p_y, p_x, g1_point_ptr]
 
     dup1 iszero         // [p_y == 0, p_y, p_x, g1_point_ptr]
@@ -67,7 +68,7 @@
     and                 // [p_x == 0 & p_y == 0, p_y, p_x, g1_point_ptr]
 
     // The passed point is already zero, do nothing.
-    clean_stack jumpi
+    clean_stack jumpi   // [p_y, p_x, g1_point_ptr]
 
     [Q] swap1 mod       // [p_y % Q, p_x, g1_point_ptr]
     [Q] sub             // [Q - (p_y % Q), p_x, g1_point_ptr]
@@ -78,7 +79,53 @@
     continue jump       // []
 
     clean_stack:
-        pop pop
+        pop pop pop
+    continue:
+
+    // Return stack:       []
+}
+
+/// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes).
+/// @param `ptr_b` - Memory pointer to the input point `b` (64 bytes).
+/// @param `out_ptr` - Memory pointer to write the result to (64 bytes).
+/// @dev Calls the ecAdd precompile with the G1 points `a` and `b`. Writes
+///      64 byte result to memory @ `out_ptr`.
+#define macro ADDITION(ptr_a, ptr_b, out_ptr) = takes (1) {
+    // Input stack:        []
+
+    // TODO: Can optimize if we ensure `a` and `b` are stored directly
+    //       next to each other in memory.
+
+    // Load `b` onto the stack
+    <ptr_b> 0x20 add    // [ptr_b + 0x20]
+    mload               // [b_y]
+    <ptr_b> mload       // [b_x, b_y]
+
+    // Load `a` onto the stack
+    <ptr_a> 0x20 add    // [ptr_a + 0x20, b_x, b_y]
+    mload               // [a_y, b_x, b_y]
+    <ptr_a> mload       // [a_x, a_y, b_x, b_y]
+
+    // Store `a` in memory @ `out_ptr`
+    <out_ptr> mstore    // [a_y, b_x, b_y]
+    <out_ptr> 0x20 add  // [out_ptr + 0x20, a_y, b_x, b_y]
+    mstore              // [b_x, b_y]
+
+    // Store `b` in memory @ `out_ptr + 0x40`
+    <out_ptr> 0x40 add  // [out_ptr + 0x40, b_x, b_y]
+    mstore              // [b_y]
+    <out_ptr> 0x60 add  // [out_ptr + 0x60, b_y]
+    mstore              // []
+
+    0x40 <out_ptr>      // [out_ptr, 0x40]
+    0x80 dup2           // [out_ptr, 0x80, out_ptr, 0x40]
+    0x06 gas            // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
+    staticcall          // [success]
+    continue jumpi      // []
+
+    // TODO: Custom revert message on failure
+    0x00 dup1 revert
+
     continue:
 }
 
