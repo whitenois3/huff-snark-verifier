@@ -66,10 +66,18 @@ impl VerificationKey {
         )
     }
 
-    /// Encodes a string that contains a 32 byte decimal number as a 32 byte hex string
+    /// Encodes a string that contains a 256 bit decimal number as a 32 byte hex string
     fn encode_num(n: &str) -> String {
-        let num = IBig::from_str_radix(n, 10).expect("Failed to parse number.");
-        num.in_radix(16).to_string()
+        let num = IBig::from_str_radix(n, 10).expect("Failed to parse verification key.");
+        let mut encoded = num.in_radix(16).to_string();
+
+        // If the encoded hex isn't 32 bytes in length, pad the beginning with
+        // zero bytes.
+        if encoded.len() != 64 {
+            encoded = format!("{}{}", "0".repeat(64 - encoded.len()), encoded);
+        }
+
+        encoded
     }
 }
 
