@@ -1,0 +1,83 @@
+/// @title PairingLib
+/// @notice TODO
+///
+///         This contract is based off of the Pairing library in Verification.sol
+///         by Christian Reitwiessner.
+///
+/// @author clabby <https://github.com/clabby>
+
+/// TODO: Use safe math. Alternatively, we can verify that the input to
+///       `verify` & `verifyProof` is valid to save gas. Will need to do
+///       some safety documentation if we go that route.
+
+/// @notice Generator point for G1
+#define table G1 = {
+    0x0000000000000000000000000000000000000000000000000000000000000001
+    0x0000000000000000000000000000000000000000000000000000000000000002
+}
+
+/// @notice Generator point for G2
+#define table G2 = {
+    0x198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c2
+    0x1800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed
+    0x90689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b
+    0x12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa
+}
+
+/// @notice The prime q in the base field F_q for G1
+#define constant Q = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47
+
+/// @dev Stores the generator point of G1 in memory at ptr.
+#define macro P1(ptr) = {
+    // Input stack:        []
+
+    __tablestart(G1)    // [G1_start]
+    __tablesize(G1)     // [G1_size, G1_start]
+    <ptr>               // [0x00, G1_size, G1_start]
+    codecopy            // []
+
+    // Return stack:       []
+}
+
+/// @dev Stores the generator point of G2 in memory at ptr.
+#define macro P2(ptr) = {
+    // Input stack:        []
+
+    __tablestart(G2)    // [G2_start]
+    __tablesize(G2)     // [G2_size, G2_start]
+    <ptr>               // [0x00, G2_size, G2_start]
+    codecopy            // []
+
+    // Return stack:       []
+}
+
+/// @param `g1_point_ptr` - Memory pointer to the input point
+/// @dev Writes the negation of the passed point to memory at `ptr`
+#define macro NEGATE(ptr) = takes (1) {
+    // Input stack:        [g1_point_ptr]
+
+    dup1 mload          // [p_x, q, g1_point_ptr]
+    dup3 0x20 add      // [g1_point_ptr + 0x20, p_x, g1_point_ptr]
+    mload               // [p_y, p_x, g1_point_ptr]
+
+    dup1 iszero         // [p_y == 0, p_y, p_x, g1_point_ptr]
+    dup3 iszero         // [p_x == 0, p_y == 0, p_y, p_x, g1_point_ptr]
+    and                 // [p_x == 0 & p_y == 0, p_y, p_x, g1_point_ptr]
+
+    // The passed point is already zero, do nothing.
+    clean_stack jumpi
+
+    [Q] swap1 mod       // [p_y % Q, p_x, g1_point_ptr]
+    [Q] sub             // [Q - (p_y % Q), p_x, g1_point_ptr]
+    dup3 0x20 add       // [g1_point_ptr + 0x20, Q - (p_y % Q), p_x, g1_point_ptr]
+    mstore              // [p_x, g1_point_ptr]
+    swap1 mstore        // []
+
+    continue jump       // []
+
+    clean_stack:
+        pop pop
+    continue:
+}
+
+// ...
