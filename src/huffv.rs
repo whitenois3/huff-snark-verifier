@@ -1,4 +1,5 @@
 use clap::Parser;
+use ibig::IBig;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Formatter;
@@ -8,7 +9,7 @@ use std::path::Path;
 /// The Huff Verifier template contract
 pub const HUFF_VERIFIER_CONTRACT: &str = include_str!("contracts/Verifier.huff");
 
-/// Huff Verifier CLI Args
+/// Huff SNARK Verifier CLI Args
 #[derive(Parser, Debug)]
 #[clap(name = "huffv", version, about, long_about = None)]
 pub struct HuffVerifier {
@@ -40,6 +41,38 @@ struct VerificationKey {
     pub ic: Vec<Vec<String>>,
 }
 
+impl VerificationKey {
+    pub fn to_packed(&self) -> String {
+        format!(
+            "0x{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
+            Self::encode_num(&self.vk_alpha_1[0]),
+            Self::encode_num(&self.vk_alpha_1[1]),
+            Self::encode_num(&self.vk_beta_2[0][0]),
+            Self::encode_num(&self.vk_beta_2[0][1]),
+            Self::encode_num(&self.vk_beta_2[1][0]),
+            Self::encode_num(&self.vk_beta_2[1][1]),
+            Self::encode_num(&self.vk_gamma_2[0][0]),
+            Self::encode_num(&self.vk_gamma_2[0][1]),
+            Self::encode_num(&self.vk_gamma_2[1][0]),
+            Self::encode_num(&self.vk_gamma_2[1][1]),
+            Self::encode_num(&self.vk_delta_2[0][0]),
+            Self::encode_num(&self.vk_delta_2[0][1]),
+            Self::encode_num(&self.vk_delta_2[1][0]),
+            Self::encode_num(&self.vk_delta_2[1][1]),
+            Self::encode_num(&self.ic[0][0]),
+            Self::encode_num(&self.ic[0][1]),
+            Self::encode_num(&self.ic[1][0]),
+            Self::encode_num(&self.ic[1][1]),
+        )
+    }
+
+    /// Encodes a string that contains a 32 byte decimal number as a 32 byte hex string
+    fn encode_num(n: &str) -> String {
+        let num = IBig::from_str_radix(n, 10).expect("Failed to parse number.");
+        num.in_radix(16).to_string()
+    }
+}
+
 impl fmt::Display for VerificationKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
@@ -62,6 +95,7 @@ fn main() {
                     //       key-specific SNARK verification contract, compiled, and output
                     //       the bytecode.
                     println!("{}", key);
+                    println!("Packed: {}", key.to_packed());
                 }
                 Err(e) => eprintln!("{}", e),
             }
