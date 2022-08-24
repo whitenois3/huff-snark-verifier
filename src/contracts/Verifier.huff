@@ -26,6 +26,9 @@
 /// @notice The prime q in the base field F_q for G1
 #define constant Q = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47
 
+/// @notice The snark scalar field.
+#define constant SNARK_SCALAR = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001
+
 /// @dev Stores the generator point of G1 in memory at ptr.
 #define macro P1(ptr) = {
     // Input stack:        []
@@ -81,4 +84,73 @@
 
 // ...
 
-// TODO: Verifier
+/// @notice The verification key of the SNARK.
+/// @dev This value is filled by the `huffv` binary, and it is packed with no
+///      periphery information (i.e. "AlphaBetaGammaDeltaIC"). See the comment
+///      of `MSTORE_VKEY` for more information.
+#define table VKEY {
+    {{placeholder}}
+}
+
+/// @notice Writes the verification key to memory at `ptr`
+/// @dev The memory layout is as follows:
+/// ╭──────┬─────────╮
+/// │Offset│Contents │
+/// ├──────┼─────────┤
+/// │0x00  │ALPHA_0  │
+/// ├──────┼─────────┤
+/// │0x20  │ALPHA_1  │
+/// ├──────┼─────────┤
+/// │0x40  │BETA_0_0 │
+/// ├──────┼─────────┤
+/// │0x60  │BETA_0_1 │
+/// ├──────┼─────────┤
+/// │0x80  │BETA_1_0 │
+/// ├──────┼─────────┤
+/// │0xA0  │BETA_1_1 │
+/// ├──────┼─────────┤
+/// │0xC0  │BETA_1_2 │
+/// ├──────┼─────────┤
+/// │0xE0  │GAMMA_0_0│
+/// ├──────┼─────────┤
+/// │0x100 │GAMMA_0_1│
+/// ├──────┼─────────┤
+/// │0x120 │GAMMA_1_0│
+/// ├──────┼─────────┤
+/// │0x140 │GAMMA_1_1│
+/// ├──────┼─────────┤
+/// │0x160 │DELTA_0_0│
+/// ├──────┼─────────┤
+/// │0x180 │DELTA_0_1│
+/// ├──────┼─────────┤
+/// │0x1A0 │DELTA_1_0│
+/// ├──────┼─────────┤
+/// │0x1C0 │DELTA_1_1│
+/// ├──────┼─────────┤
+/// │0x1E0 │IC_0_0   │
+/// ├──────┼─────────┤
+/// │0x200 │IC_0_1   │
+/// ├──────┼─────────┤
+/// │0x220 │IC_1_0   │
+/// ├──────┼─────────┤
+/// │0x240 │IC_1_1   │
+/// └──────┴─────────┘
+#define macro MSTORE_VKEY(ptr) = {
+    // Input stack:        []
+
+    __tablestart(VKEY)  // [VKEY_start]
+    __tablesize(VKEY)   // [VKEY_size, VKEY_start]
+    <ptr>               // [0x00, VKEY_size, VKEY_start]
+    codecopy            // []
+
+    // Return stack:       []
+}
+
+/// @notice Verifies a SNARK proof.
+/// @return `bool` True if proof is valid, false if not.
+#define macro VERIFY_PROOF() = {
+    MSTORE_VKEY(0x00)   // []
+    [SNARK_SCALAR]      // [snark_scalar]
+
+    // TODO
+}
