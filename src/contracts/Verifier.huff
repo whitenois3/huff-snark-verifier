@@ -55,6 +55,9 @@
 
 /// @param `ptr` - Memory pointer to the input point
 /// @dev Writes the negation of the passed point to memory at `ptr`
+///
+/// - SAFETY:
+///      Overwrites memory from [ptr:ptr+0x40]
 #define macro NEGATE(ptr) = {
     // Input stack:        []
 
@@ -90,35 +93,39 @@
 /// @param `out_ptr` - Memory pointer to write the result to (64 bytes).
 /// @dev Calls the ecAdd precompile with the G1 points `a` and `b`. Writes
 ///      64 byte result to memory @ `out_ptr`.
-#define macro ADDITION(ptr_a, ptr_b, out_ptr) = takes (1) {
+///
+/// - SAFETY:
+///      Overwrites memory from [out_ptr:out_ptr+0x80]
+#define macro ADDITION(ptr_a, ptr_b, out_ptr) = {
     // Input stack:        []
 
     // TODO: Can optimize if we ensure `a` and `b` are stored directly
-    //       next to each other in memory.
+    //       next to each other in memory to begin with.
 
     // Load `b` onto the stack
     <ptr_b> 0x20 add    // [ptr_b + 0x20]
-    mload               // [b_y]
-    <ptr_b> mload       // [b_x, b_y]
+    mload               // [b_1]
+    <ptr_b> mload       // [b_0, b_1]
 
     // Load `a` onto the stack
-    <ptr_a> 0x20 add    // [ptr_a + 0x20, b_x, b_y]
-    mload               // [a_y, b_x, b_y]
-    <ptr_a> mload       // [a_x, a_y, b_x, b_y]
+    <ptr_a> 0x20 add    // [ptr_a + 0x20, b_0, b_1]
+    mload               // [a_1, b_0, b_1]
+    <ptr_a> mload       // [a_0, a_1, b_0, b_1]
 
     // Store `a` in memory @ `out_ptr`
-    <out_ptr> mstore    // [a_y, b_x, b_y]
-    <out_ptr> 0x20 add  // [out_ptr + 0x20, a_y, b_x, b_y]
-    mstore              // [b_x, b_y]
+    <out_ptr> mstore    // [a_1, b_0, b_1]
+    <out_ptr> 0x20 add  // [out_ptr + 0x20, a_1, b_0, b_1]
+    mstore              // [b_0, b_1]
 
     // Store `b` in memory @ `out_ptr + 0x40`
-    <out_ptr> 0x40 add  // [out_ptr + 0x40, b_x, b_y]
-    mstore              // [b_y]
-    <out_ptr> 0x60 add  // [out_ptr + 0x60, b_y]
+    <out_ptr> 0x40 add  // [out_ptr + 0x40, b_0, b_1]
+    mstore              // [b_1]
+    <out_ptr> 0x60 add  // [out_ptr + 0x60, b_1]
     mstore              // []
 
     0x40 <out_ptr>      // [out_ptr, 0x40]
     0x80 dup2           // [out_ptr, 0x80, out_ptr, 0x40]
+    // TODO: Sub 2000 from gas / add invalid op on failure?
     0x06 gas            // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
     staticcall          // [success]
     continue jumpi      // []
@@ -127,6 +134,48 @@
     0x00 dup1 revert
 
     continue:
+
+    // Return stack:       []
+}
+
+/// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes).
+/// @param `scalar_ptr` - Memory pointer to the input `scalar` (32 bytes).
+/// @param `out_ptr` - Memory pointer to write the result to (64 bytes).
+/// @dev Calls the ecMul precompile with the G1 point `a` and the `scalar.
+///      Writes 64 byte result to memory @ `out_ptr`.
+///
+/// - SAFETY:
+///      Overwrites memory from [out_ptr:out_ptr+0x60]
+#define macro SCALAR_MUL(ptr_a, scalar_ptr, out_ptr) = {
+    // Input stack:        []
+
+    // TODO: Can optimize if we ensure `ptr_a` and `scalar` are stored directly
+    //       next to each other in memory to begin with.
+
+    <scalar_ptr> mload  // [scalar]
+    <ptr_a> mload       // [a_0, scalar]
+    <ptr_a> 0x20 add    // [ptr_a + 0x20, a_0, scalar]
+    mload               // [a_1, a_0, scalar]
+
+    <out_ptr> 0x20 add  // [out_ptr + 0x20, a_1, a_0, scalar]
+    mstore              // [a_0, scalar]
+    0x00 mstore         // [scalar]
+    <out_ptr> 0x40 add  // [out_ptr + 0x20, scalar]
+    mstore              // []
+
+    0x40 <out_ptr>      // [out_ptr, 0x40]
+    0x60 dup2           // [out_ptr, 0x60, out_ptr, 0x40]
+    // TODO: Sub 2000 from gas / add invalid op on failure?
+    0x07 gas            // [gas, ec_add_precompile, out_ptr, 0x60, out_ptr, 0x40]
+    staticcall          // [success]
+    continue jumpi      // []
+
+    // TODO: Custom revert message on failure
+    0x00 dup1 revert
+    
+    continue:
+
+    // Return stack:       []
 }
 
 // ...
