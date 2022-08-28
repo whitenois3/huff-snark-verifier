@@ -97,7 +97,7 @@
 /// - SAFETY:
 ///      Overwrites memory from [out_ptr:out_ptr+0x80]
 #define macro ADDITION(ptr_a, ptr_b, out_ptr) = {
-    // Input stack:        []
+    // Input stack:        [ptr_a, ptr_b, out_ptr]
 
     // TODO: Can optimize if we ensure `a` and `b` are stored directly
     //       next to each other in memory to begin with.
@@ -178,6 +178,12 @@
     // Return stack:       []
 }
 
+// #define macro PAIRING(ptr_p1, ptr_p2) = {
+//     <ptr_p1> mload
+//     <ptr_p2> mload
+//     eq
+// }
+
 // ...
 
 /// @notice The verification key of the SNARK.
@@ -185,52 +191,11 @@
 ///      periphery information (i.e. "AlphaBetaGammaDeltaIC"). See the comment
 ///      of `MSTORE_VKEY` for more information.
 #define table VKEY {
-    {{placeholder}}
+    // {{placeholder}}
 }
 
 /// @notice Writes the verification key to memory at `ptr`
 /// @dev The memory layout is as follows:
-/// ╭──────┬─────────╮
-/// │Offset│Contents │
-/// ├──────┼─────────┤
-/// │0x00  │ALPHA_0  │
-/// ├──────┼─────────┤
-/// │0x20  │ALPHA_1  │
-/// ├──────┼─────────┤
-/// │0x40  │BETA_0_0 │
-/// ├──────┼─────────┤
-/// │0x60  │BETA_0_1 │
-/// ├──────┼─────────┤
-/// │0x80  │BETA_1_0 │
-/// ├──────┼─────────┤
-/// │0xA0  │BETA_1_1 │
-/// ├──────┼─────────┤
-/// │0xC0  │BETA_1_2 │
-/// ├──────┼─────────┤
-/// │0xE0  │GAMMA_0_0│
-/// ├──────┼─────────┤
-/// │0x100 │GAMMA_0_1│
-/// ├──────┼─────────┤
-/// │0x120 │GAMMA_1_0│
-/// ├──────┼─────────┤
-/// │0x140 │GAMMA_1_1│
-/// ├──────┼─────────┤
-/// │0x160 │DELTA_0_0│
-/// ├──────┼─────────┤
-/// │0x180 │DELTA_0_1│
-/// ├──────┼─────────┤
-/// │0x1A0 │DELTA_1_0│
-/// ├──────┼─────────┤
-/// │0x1C0 │DELTA_1_1│
-/// ├──────┼─────────┤
-/// │0x1E0 │IC_0_0   │
-/// ├──────┼─────────┤
-/// │0x200 │IC_0_1   │
-/// ├──────┼─────────┤
-/// │0x220 │IC_1_0   │
-/// ├──────┼─────────┤
-/// │0x240 │IC_1_1   │
-/// └──────┴─────────┘
 #define macro MSTORE_VKEY(ptr) = {
     // Input stack:        []
 
@@ -240,6 +205,62 @@
     codecopy            // []
 
     // Return stack:       []
+}
+
+/// - SAFETY:
+///     MEMORY RESERVATIONS:
+///     [0x00:0x80] - Scratch Space
+///     [0x80:0x2E0] - Verification key
+///     [0x2E0:0x320] - vk_x
+#define macro VERIFY(input_ptr) = {
+    // Stores the verification key in memory [0x80:0x2E0]
+    MSTORE_VKEY(0x00)       // []
+    // Push the snark scalar to the stack
+    [SNARK_SCALAR]          // [snark_scalar]
+
+    <input_ptr> mload       // [input_len, snark_scalar]
+    0x01 add                // [input_len + 1, snark_scalar]
+    // TODO: IC length can be dynamic, I think.
+    0x02 eq                 // [input_len + 1 == 2, snark_scalar]
+    start_verify jumpi      // [snark_scalar]
+
+    fail:
+        // TODO: Custom revert message on failure
+        0x00 dup1 revert
+
+    // input_len + 1 == IC_length
+    start_verify:
+        // Compute the linear combination vk_x
+        // 0x260-0x2A0 reserved for the result.
+        <input_ptr>         // [input_ptr, snark_scalar]
+        0x20 add            // [input_ptr + 0x20, snark_scalar]
+        <input_ptr> mload   // [input_len, input_ptr + 0x20, snark_scalar]
+        0x00                // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+        linear_combination:
+            // Check if the loop is complete
+            dup1 dup3       // [input_len, loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]  
+            gt iszero       // [input_len <= loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            post_loop jumpi // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+
+            // Load input[i] onto the stack
+            dup1 dup4 add   // [input_ptr + 0x20 + loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup1            // [cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            mload           // [input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+
+            // require(input[i] < snark_scalar)
+            dup5            // [snark_scalar, input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            gt iszero       // [snark_scalar <= input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            fail jumpi      // [cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+
+            // TODO: `ADDITION` needs to accept stack args
+            ADDITION()
+
+            // Increase loop index
+            0x20 add        // [loop_offset + 0x20, input_len, input_ptr + 0x20, snark_scalar]
+            // Continue combination loop
+            linear_combination jump
+        post_loop:
+            // ...
 }
 
 /// @notice Verifies a SNARK proof.
