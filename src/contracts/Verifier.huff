@@ -29,6 +29,18 @@
 /// @notice The snark scalar field.
 #define constant SNARK_SCALAR = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001
 
+/// @notice The location of the `IC` portion of the verification key's length in memory.
+#define constant IC_LEN_PTR = 0x1e0
+
+/// @notice The location of the first element of the `IC` portion of the verification key in memory.
+#define constant IC_PTR = 0x200
+
+/// @notice The location of the second element of the `IC` portion of the verification key in memory.
+#define constant IC_PTR_PLUS_1 = 0x220
+
+/// @notice The location of `vk_x` in memory
+#define constant VK_X_PTR = 0x2e0
+
 /// @dev Stores the generator point of G1 in memory at ptr.
 #define macro P1(ptr) = {
     // Input stack:        []
@@ -90,41 +102,82 @@
 
 /// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes).
 /// @param `ptr_b` - Memory pointer to the input point `b` (64 bytes).
-/// @param `out_ptr` - Memory pointer to write the result to (64 bytes).
 /// @dev Calls the ecAdd precompile with the G1 points `a` and `b`. Writes
-///      64 byte result to memory @ `out_ptr`.
-///
+///      64 byte result to memory @ VK_X_PTR (0x2e0).
+/// 
 /// - SAFETY:
-///      Overwrites memory from [out_ptr:out_ptr+0x80]
-#define macro ADDITION(ptr_a, ptr_b, out_ptr) = {
-    // Input stack:        [ptr_a, ptr_b, out_ptr]
-
-    // TODO: Can optimize if we ensure `a` and `b` are stored directly
-    //       next to each other in memory to begin with.
+///      Overwrites scratch memory from [0x00:0x80]
+///      Overwrites vk_x in memory from [VK_X_PTR:VK_X_PTR+0x40]
+#define macro ADDITION() = takes (2) {
+    // Input stack:        [ptr_b, ptr_a]
 
     // Load `b` onto the stack
-    <ptr_b> 0x20 add    // [ptr_b + 0x20]
-    mload               // [b_1]
-    <ptr_b> mload       // [b_0, b_1]
+    dup1 mload          // [b_0, ptr_b, ptr_a]
+    swap1 0x20 add      // [ptr_b + 0x20, b_0, ptr_a]
+    mload               // [b_1, b_0, ptr_a]
 
     // Load `a` onto the stack
-    <ptr_a> 0x20 add    // [ptr_a + 0x20, b_0, b_1]
-    mload               // [a_1, b_0, b_1]
-    <ptr_a> mload       // [a_0, a_1, b_0, b_1]
+    swap2               // [ptr_a, b_0, b_1]
+    dup1 0x20 add       // [ptr_a + 0x20, ptr_a, b_0, b_1]
+    mload swap1         // [ptr_a, a_1, b_0, b_1]
+    mload               // [a_0, a_1, b_0, b_1]
 
-    // Store `a` in memory @ `out_ptr`
-    <out_ptr> mstore    // [a_1, b_0, b_1]
-    <out_ptr> 0x20 add  // [out_ptr + 0x20, a_1, b_0, b_1]
-    mstore              // [b_0, b_1]
+    // Store `a` (64 bytes) in scratch space @ 0x00
+    0x00 mstore         // [a_1, b_0, b_1]
+    0x20 mstore         // [b_0, b_1]
+    // Store `b` (64 bytes) in scratch space @ 0x40
+    0x40 mstore         // [b_1]
+    0x60 mstore         // []
 
-    // Store `b` in memory @ `out_ptr + 0x40`
-    <out_ptr> 0x40 add  // [out_ptr + 0x40, b_0, b_1]
-    mstore              // [b_1]
-    <out_ptr> 0x60 add  // [out_ptr + 0x60, b_1]
-    mstore              // []
+    // The `ADDITION` macro is *only* used for the linear combination on the
+    // vk_x g1 point in the `VERIFY` macro. Because of this, the output memory
+    // location of the staticcall is hardcoded to 0x2E0. 
+    0x40 [VK_X_PTR]     // [vk_x_ptr, 0x40]
+    0x80 0x00           // [0x00, 0x80, vk_x_ptr, 0x40]
+    // TODO: Sub 2000 from gas / add invalid op on failure?
+    0x06 gas            // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
+    staticcall          // [success]
+    continue jumpi      // []
 
-    0x40 <out_ptr>      // [out_ptr, 0x40]
-    0x80 dup2           // [out_ptr, 0x80, out_ptr, 0x40]
+    // TODO: Custom revert message on failure
+    0x00 dup1 revert
+
+    continue:
+
+    // Return stack:       []
+}
+
+/// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes).
+/// @dev Calls the ecAdd precompile with the G1 points `a` and `b`. Writes
+///      64 byte result to memory @ VK_X_PTR (0x2e0).
+///      
+///      This macro is a secondary version of `ADDITION` that is only used in the
+///      linear combination loop. The result of a `SCALAR_MUL` call is always
+///      the second operand of the `ADDITION` call within the loop, and we
+///      use this macro so that we don't have to re-store the `SCALAR_MUL`
+///      result in scratch space.
+/// 
+/// - SAFETY:
+///      Overwrites scratch memory from [0x40:0x80]
+///      Overwrites vk_x in memory from [VK_X_PTR:VK_X_PTR+0x40]
+#define macro ADDITION_2() = takes (1) {
+    // Input stack:        [ptr_a]
+
+    // Load `a` onto the stack
+    dup1 0x20 add       // [ptr_a + 0x20, ptr_a]
+    mload swap1         // [ptr_a, a_1]
+    mload               // [a_0, a_1]
+
+    // Store `a` (64 bytes) in scratch space @ 0x40
+    // (the result of a `SCALAR_MUL` call is already in 0x00:0x40)
+    0x40 mstore         // [a_1]
+    0x60 mstore         // []
+
+    // The `ADDITION_2` macro is *only* used for the linear combination on the
+    // vk_x g1 point in the `VERIFY` macro. Because of this, the output memory
+    // location of the staticcall is hardcoded to 0x2E0. 
+    0x40 [VK_X_PTR]     // [vk_x_ptr, 0x40]
+    0x80 0x00           // [0x00, 0x80, vk_x_ptr, 0x40]
     // TODO: Sub 2000 from gas / add invalid op on failure?
     0x06 gas            // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
     staticcall          // [success]
@@ -140,31 +193,22 @@
 
 /// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes).
 /// @param `scalar_ptr` - Memory pointer to the input `scalar` (32 bytes).
-/// @param `out_ptr` - Memory pointer to write the result to (64 bytes).
-/// @dev Calls the ecMul precompile with the G1 point `a` and the `scalar.
-///      Writes 64 byte result to memory @ `out_ptr`.
-///
-/// - SAFETY:
-///      Overwrites memory from [out_ptr:out_ptr+0x60]
-#define macro SCALAR_MUL(ptr_a, scalar_ptr, out_ptr) = {
-    // Input stack:        []
+/// @dev Calls the ecMul precompile with the G1 point `a` and the `scalar`.
+///      Writes 64 byte result to scratch memory @ 0x00.
+#define macro SCALAR_MUL() = takes (2) {
+    // Input stack:        [ptr_a, scalar_ptr]
 
-    // TODO: Can optimize if we ensure `ptr_a` and `scalar` are stored directly
-    //       next to each other in memory to begin with.
+    dup1 0x20 add       // [ptr_a + 0x20, ptr_a, scalar_ptr]
+    mload               // [a_1, ptr_a, scalar_ptr]
+    swap1 mload         // [a_0, a_1, scalar_ptr]
+    swap2 mload         // [scalar, a_1, a_0]
 
-    <scalar_ptr> mload  // [scalar]
-    <ptr_a> mload       // [a_0, scalar]
-    <ptr_a> 0x20 add    // [ptr_a + 0x20, a_0, scalar]
-    mload               // [a_1, a_0, scalar]
+    0x40 mstore         // [a_1, a_0]
+    0x20 mstore         // [a_0]
+    0x00 mstore         // []
 
-    <out_ptr> 0x20 add  // [out_ptr + 0x20, a_1, a_0, scalar]
-    mstore              // [a_0, scalar]
-    0x00 mstore         // [scalar]
-    <out_ptr> 0x40 add  // [out_ptr + 0x20, scalar]
-    mstore              // []
-
-    0x40 <out_ptr>      // [out_ptr, 0x40]
-    0x60 dup2           // [out_ptr, 0x60, out_ptr, 0x40]
+    0x40 0x00           // [0x00, 0x40]
+    0x60 dup2           // [0x00, 0x60, 0x00, 0x40]
     // TODO: Sub 2000 from gas / add invalid op on failure?
     0x07 gas            // [gas, ec_add_precompile, out_ptr, 0x60, out_ptr, 0x40]
     staticcall          // [success]
@@ -178,6 +222,7 @@
     // Return stack:       []
 }
 
+// We only need paringProd4 for the pairing check.
 // #define macro PAIRING(ptr_p1, ptr_p2) = {
 //     <ptr_p1> mload
 //     <ptr_p2> mload
@@ -252,15 +297,28 @@
             gt iszero       // [snark_scalar <= input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
             fail jumpi      // [cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
-            // TODO: `ADDITION` needs to accept stack args
-            ADDITION()
+            // Scalar mul IC[i + 1], input[i]
+            dup1            // [cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            [IC_PTR_PLUS_1] // [ic_ptr, cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            add             // [ic_ptr + cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+
+            // Store scalar mul result in scratch space @ 0x00
+            SCALAR_MUL()    // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+
+            [VK_X_PTR]      // [vk_x_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            ADDITION_2()    // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]]
 
             // Increase loop index
             0x20 add        // [loop_offset + 0x20, input_len, input_ptr + 0x20, snark_scalar]
             // Continue combination loop
             linear_combination jump
         post_loop:
-            // ...
+            // Add the point in IC[0] to `vk_x`
+            [IC_PTR]        // [ic_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            [VK_X_PTR]      // [vk_x_ptr, ic_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            ADDITION()      // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+
+            // pairingProd4
 }
 
 /// @notice Verifies a SNARK proof.

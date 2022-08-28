@@ -12,15 +12,21 @@
 }
 
 #define macro ADDITION_WRAPPER() = {
-    0x80 0x04 0x00 calldatacopy
-    ADDITION(0x00, 0x40, 0x00)
+    // Copy the two points into scratch space
+    0x80 0x04 0x00 calldatacopy // []
 
-    0x40 0x00 return
+    0x00 0x40                   // [0x40, 0x00]
+    ADDITION()                  // []
+
+    0x40 0x2e0 return
 }
 
 #define macro SCALAR_MUL_WRAPPER() = {
-    0x60 0x04 0x00 calldatacopy
-    SCALAR_MUL(0x00, 0x40, 0x00)
+    // Copy the point and scalar into scratch space
+    0x60 0x04 0x00 calldatacopy // []
+
+    0x40 0x00                   // [0x00, 0x40]
+    SCALAR_MUL()                // []
 
     0x40 0x00 return
 }
