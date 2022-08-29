@@ -33,10 +33,12 @@
 }
 
 #define macro VERIFY_WRAPPER() = {
-    0x04 calldatasize sub   // [cd_size - 0x04]
-    0x04 0x6A0 calldatacopy // []
+    0x100 0x04 0x6A0 calldatacopy // []
+    0x124 calldatasize sub        // [cd_size - 0x124]
+    0x124                         // [0x124, cd_size - 0x124]
+    0x6A0 0x100 add calldatacopy
 
-    VERIFY(0x7C0)
+    VERIFY(0x6A0)
 
     0x00 mstore
     0x20 0x00 return

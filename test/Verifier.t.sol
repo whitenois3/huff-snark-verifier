@@ -91,7 +91,7 @@ contract VerifierTest is Test {
         uint[] memory inputs = new uint[](1);
         inputs[0] = uint(182377969136052884622247920755931704678273168534);
         
-        assertEq(huffVerifier.verify(a, b, c, inputs), true);
         assertEq(verifier.verifyProof(a, b, c, inputs), true);
+        assertEq(huffVerifier.verify(a, b, c, inputs), true);
     }
 }
