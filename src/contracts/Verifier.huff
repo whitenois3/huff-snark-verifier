@@ -1,5 +1,5 @@
 /// @title Huff Snark Verifier
-/// @notice TODO
+/// @notice A gas-optimized, purpose-driven snark verification contract.
 ///
 ///         This contract is based off of Verification.sol by Christian Reitwiessner.
 ///
@@ -13,32 +13,31 @@
 /// - [x] Don't store entire vkey in memory. Only store the ICs and codecopy other items in `PAIRING`.
 /// - [ ] Make `PAIRING` macro work with multiple constraints.
 /// - [ ] Tests for multi-constraint proofs & fail cases.
-/// - [ ] Clean and update comments.
+/// - [ ] Clean and update comments. (Double check stack comments)
 /// - [ ] Start optimizing and make a external template for `huffv` to use.
 /// - [ ] Update `huffv`.
 /// - [ ] Optimizations.
 /// - [ ] Huff tests.
 /// - [ ] Add documentation.
 
-/// @notice Generator point for G1
-#define table G1 = {
-    0x0000000000000000000000000000000000000000000000000000000000000001
-    0x0000000000000000000000000000000000000000000000000000000000000002
-}
-
-/// @notice Generator point for G2
-#define table G2 = {
-    0x198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c2
-    0x1800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed
-    0x90689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b
-    0x12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa
-}
-
-/// @notice The prime q in the base field F_q for G1
-#define constant Q = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47
+/// SAFETY:
+///
+/// - MEMORY LAYOUT ON `VERIFY` EXECUTION:
+/// +-------------------------------------------+--------------------------------------------+
+/// |               Offset Range                |                  Contents                  |
+/// +-------------------------------------------+--------------------------------------------+
+/// | 0x00:0x80                                 | Scratch Space                              |
+/// | 0x80:0xC0                                 | vk_x (G1 Point)                            |
+/// | 0xC0:(0xE0+n_ics*0x40)                    | ICs                                        |
+/// | (0xE0+n_ics*0x40):(0xE0+n_ics*0x40+0x300) | Pairing Inputs                             |
+/// | >= 0xE0+n_ics*0x40+0x300                  | Verification Inputs (proof, public inputs) |
+/// +-------------------------------------------+--------------------------------------------+
 
 /// @notice The snark scalar field.
 #define constant SNARK_SCALAR = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001
+
+/// @notice The prime q in the base field F_q for G1
+#define constant Q = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47
 
 /// @notice The location of the `IC` portion of the verification key's length in memory.
 #define constant IC_LEN_PTR = 0xc0
@@ -52,188 +51,174 @@
 /// @notice The location of `vk_x` in memory
 #define constant VK_X_PTR = 0x80
 
-/// @dev Stores the generator point of G1 in memory at ptr.
-#define macro P1(ptr) = {
-    // Input stack:        []
-
-    __tablesize(G1)     // [G1_size]
-    __tablestart(G1)    // [G1_start, G1_size]
-    <ptr>               // [0x00, G1_start, G1_size]
-    codecopy            // []
-
-    // Return stack:       []
-}
-
-/// @dev Stores the generator point of G2 in memory at ptr.
-#define macro P2(ptr) = {
-    // Input stack:        []
-
-    __tablesize(G2)     // [G2_size]
-    __tablestart(G2)    // [G2_start, G2_size]
-    <ptr>               // [0x00, G1_start, G2_size]
-    codecopy            // []
-
-    // Return stack:       []
-}
-
-/// @param `ptr` - Memory pointer to the input point
-/// @dev Writes the negation of the passed point to memory at `ptr`
+/// @notice Writes the negation of the passed point to memory at `ptr`
+/// @param `ptr` - Memory pointer to the input G1 g1_point_ptr
 ///
 /// - SAFETY:
 ///      Overwrites memory from [ptr:ptr+0x40]
 #define macro NEGATE() = takes (1) {
-    // Input stack:        [g1_point_ptr]
+    // Input stack:                  [g1_point_ptr]
 
-    dup1 mload          // [p_x, g1_point_ptr]
-    dup2 0x20 add       // [g1_point_ptr + 0x20, p_x, g1_point_ptr]
-    mload               // [p_y, p_x, g1_point_ptr]
+    dup1 mload                    // [p_x, g1_point_ptr]
+    dup2 0x20 add                 // [g1_point_ptr + 0x20, p_x, g1_point_ptr]
+    mload                         // [p_y, p_x, g1_point_ptr]
 
-    dup1 iszero         // [p_y == 0, p_y, p_x, g1_point_ptr]
-    dup3 iszero         // [p_x == 0, p_y == 0, p_y, p_x, g1_point_ptr]
-    and                 // [p_x == 0 & p_y == 0, p_y, p_x, g1_point_ptr]
+    dup1 iszero                   // [p_y == 0, p_y, p_x, g1_point_ptr]
+    dup3 iszero                   // [p_x == 0, p_y == 0, p_y, p_x, g1_point_ptr]
+    and                           // [p_x == 0 & p_y == 0, p_y, p_x, g1_point_ptr]
 
     // The passed point is already zero, do nothing.
-    clean_stack jumpi   // [p_y, p_x, g1_point_ptr]
+    clean_stack jumpi             // [p_y, p_x, g1_point_ptr]
 
-    [Q] swap1 mod       // [p_y % Q, p_x, g1_point_ptr]
-    [Q] sub             // [Q - (p_y % Q), p_x, g1_point_ptr]
-    dup3 0x20 add       // [g1_point_ptr + 0x20, Q - (p_y % Q), p_x, g1_point_ptr]
-    mstore              // [p_x, g1_point_ptr]
-    swap1 mstore        // []
+    [Q] swap1 mod                 // [p_y % Q, p_x, g1_point_ptr]
+    [Q] sub                       // [Q - (p_y % Q), p_x, g1_point_ptr]
+    dup3 0x20 add                 // [g1_point_ptr + 0x20, Q - (p_y % Q), p_x, g1_point_ptr]
+    mstore                        // [p_x, g1_point_ptr]
+    swap1 mstore                  // []
 
-    continue jump       // []
+    continue jump                 // []
 
     clean_stack:
         pop pop pop
     continue:
 
-    // Return stack:       []
+    // Return stack:                 []
 }
 
+/// @notice Calls the ecAdd precompile with the G1 points `a` and `b`. Writes
+///         64 byte result to memory @ VK_X_PTR (0x80).
 /// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes).
 /// @param `ptr_b` - Memory pointer to the input point `b` (64 bytes).
-/// @dev Calls the ecAdd precompile with the G1 points `a` and `b`. Writes
-///      64 byte result to memory @ VK_X_PTR (0x80).
 /// 
 /// - SAFETY:
 ///      Overwrites scratch memory from [0x00:0x80]
 ///      Overwrites vk_x in memory from [VK_X_PTR:VK_X_PTR+0x40]
 #define macro ADDITION() = takes (2) {
-    // Input stack:        [ptr_b, ptr_a]
+    // Input stack:                  [ptr_b, ptr_a]
 
     // Load `b` onto the stack
-    dup1 mload          // [b_0, ptr_b, ptr_a]
-    swap1 0x20 add      // [ptr_b + 0x20, b_0, ptr_a]
-    mload               // [b_1, b_0, ptr_a]
+    dup1 mload                    // [b_0, ptr_b, ptr_a]
+    swap1 0x20 add                // [ptr_b + 0x20, b_0, ptr_a]
+    mload                         // [b_1, b_0, ptr_a]
 
     // Load `a` onto the stack
-    swap2               // [ptr_a, b_0, b_1]
-    dup1 0x20 add       // [ptr_a + 0x20, ptr_a, b_0, b_1]
-    mload swap1         // [ptr_a, a_1, b_0, b_1]
-    mload               // [a_0, a_1, b_0, b_1]
+    swap2                         // [ptr_a, b_0, b_1]
+    dup1 0x20 add                 // [ptr_a + 0x20, ptr_a, b_0, b_1]
+    mload swap1                   // [ptr_a, a_1, b_0, b_1]
+    mload                         // [a_0, a_1, b_0, b_1]
 
     // Store `a` (64 bytes) in scratch space @ 0x00
-    0x00 mstore         // [a_1, b_0, b_1]
-    0x20 mstore         // [b_0, b_1]
+    0x00 mstore                   // [a_1, b_0, b_1]
+    0x20 mstore                   // [b_0, b_1]
     // Store `b` (64 bytes) in scratch space @ 0x40
-    0x40 mstore         // [b_1]
-    0x60 mstore         // []
+    0x40 mstore                   // [b_1]
+    0x60 mstore                   // []
 
     // The `ADDITION` macro is *only* used for the linear combination on the
     // vk_x g1 point in the `VERIFY` macro. Because of this, the output memory
     // location of the staticcall is hardcoded to 0x80. 
-    0x40 [VK_X_PTR]     // [vk_x_ptr, 0x40]
-    dup1 0x00           // [0x00, 0x80, vk_x_ptr, 0x40]
+    0x40 [VK_X_PTR]               // [vk_x_ptr, 0x40]
+    dup1 0x00                     // [0x00, 0x80, vk_x_ptr, 0x40]
     // TODO: Sub 2000 from gas / add invalid op on failure?
-    0x06 gas            // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
-    staticcall          // [success]
-    continue jumpi      // []
+    0x06 gas                      // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
+    staticcall                    // [success]
+    continue jumpi                // []
 
     // TODO: Custom revert message on failure
     0x00 dup1 revert
 
     continue:
 
-    // Return stack:       []
+    // Return stack:                 []
 }
 
-/// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes).
-/// @dev Calls the ecAdd precompile with the G1 points `a` and `b`. Writes
-///      64 byte result to memory @ VK_X_PTR (0x80).
+/// @notice Calls the ecAdd precompile with the G1 points `a` and `b`. Writes
+///         64 byte result to memory @ VK_X_PTR (0x80).
 ///      
-///      This macro is a secondary version of `ADDITION` that is only used in the
-///      linear combination loop. The result of a `SCALAR_MUL` call is always
-///      the second operand of the `ADDITION` call within the loop, and we
-///      use this macro so that we don't have to re-store the `SCALAR_MUL`
-///      result in scratch space.
-/// 
+///         This macro is a secondary version of `ADDITION` that is only used in the
+///         linear combination loop. The result of a `SCALAR_MUL` call is always
+///         the second operand of the `ADDITION` call within the loop, and we
+///         use this macro so that we don't have to re-store the `SCALAR_MUL`
+///         result in scratch space.
+/// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes). 
+///
 /// - SAFETY:
 ///      Overwrites scratch memory from [0x40:0x80]
 ///      Overwrites vk_x in memory from [VK_X_PTR:VK_X_PTR+0x40]
 #define macro ADDITION_2() = takes (1) {
-    // Input stack:        [ptr_a]
+    // Input stack:                  [ptr_a]
 
     // Load `a` onto the stack
-    dup1 0x20 add       // [ptr_a + 0x20, ptr_a]
-    mload swap1         // [ptr_a, a_1]
-    mload               // [a_0, a_1]
+    dup1 0x20 add                 // [ptr_a + 0x20, ptr_a]
+    mload swap1                   // [ptr_a, a_1]
+    mload                         // [a_0, a_1]
 
     // Store `a` (64 bytes) in scratch space @ 0x40
     // (the result of a `SCALAR_MUL` call is already in 0x00:0x40)
-    0x40 mstore         // [a_1]
-    0x60 mstore         // []
+    0x40 mstore                   // [a_1]
+    0x60 mstore                   // []
 
     // The `ADDITION_2` macro is *only* used for the linear combination on the
     // vk_x g1 point in the `VERIFY` macro. Because of this, the output memory
     // location of the staticcall is hardcoded to 0x80. 
-    0x40 [VK_X_PTR]     // [vk_x_ptr, 0x40]
-    dup1 0x00           // [0x00, 0x80, vk_x_ptr, 0x40]
+    0x40 [VK_X_PTR]               // [vk_x_ptr, 0x40]
+    dup1 0x00                     // [0x00, 0x80, vk_x_ptr, 0x40]
     // TODO: Sub 2000 from gas / add invalid op on failure?
-    0x06 gas            // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
-    staticcall          // [success]
-    continue jumpi      // []
+    0x06 gas                      // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
+    staticcall                    // [success]
+    continue jumpi                // []
 
     // TODO: Custom revert message on failure
     0x00 dup1 revert
 
     continue:
 
-    // Return stack:       []
+    // Return stack:                 []
 }
 
+/// @notice Calls the ecMul precompile with the G1 point `a` and the `scalar`.
+///         Writes 64 byte result to scratch memory @ 0x00.
 /// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes).
 /// @param `scalar_ptr` - Memory pointer to the input `scalar` (32 bytes).
-/// @dev Calls the ecMul precompile with the G1 point `a` and the `scalar`.
-///      Writes 64 byte result to scratch memory @ 0x00.
+///
+/// - SAFETY:
+///     Overwrites scratch memory from [0x00:0x60]
 #define macro SCALAR_MUL() = takes (2) {
-    // Input stack:        [ptr_a, scalar_ptr]
+    // Input stack:                  [ptr_a, scalar_ptr]
 
-    dup1 0x20 add       // [ptr_a + 0x20, ptr_a, scalar_ptr]
-    mload               // [a_1, ptr_a, scalar_ptr]
-    swap1 mload         // [a_0, a_1, scalar_ptr]
-    swap2 mload         // [scalar, a_1, a_0]
+    dup1 0x20 add                 // [ptr_a + 0x20, ptr_a, scalar_ptr]
+    mload                         // [a_1, ptr_a, scalar_ptr]
+    swap1 mload                   // [a_0, a_1, scalar_ptr]
+    swap2 mload                   // [scalar, a_1, a_0]
 
-    0x40 mstore         // [a_1, a_0]
-    0x20 mstore         // [a_0]
-    0x00 mstore         // []
+    0x40 mstore                   // [a_1, a_0]
+    0x20 mstore                   // [a_0]
+    0x00 mstore                   // []
 
-    0x40 0x00           // [0x00, 0x40]
-    0x60 dup2           // [0x00, 0x60, 0x00, 0x40]
+    0x40 0x00                     // [0x00, 0x40]
+    0x60 dup2                     // [0x00, 0x60, 0x00, 0x40]
     // TODO: Sub 2000 from gas / add invalid op on failure?
-    0x07 gas            // [gas, ec_add_precompile, out_ptr, 0x60, out_ptr, 0x40]
-    staticcall          // [success]
-    continue jumpi      // []
+    0x07 gas                      // [gas, ec_add_precompile, out_ptr, 0x60, out_ptr, 0x40]
+    staticcall                    // [success]
+    continue jumpi                // []
 
     // TODO: Custom revert message on failure
     0x00 dup1 revert
     
     continue:
 
-    // Return stack:       []
+    // Return stack:                 []
 }
 
-// We only need paringProd4 for the pairing check.
-#define macro PAIRING(input_ptr) = returns(1) {
+/// @notice Calls the `ecPairing` precompile with the following arguments:
+///         - NEGATE(proof_a), proof_b
+///         - alpha_1, beta_2
+///         - vk_x, gamma_2
+///         - proof_c, delta_2
+/// @dev Because this macro is used *only* in the `VERIFY` macro and the, 
+///      the inputs to the `ecPairing` precompile are hard-coded.
+/// @return `is_valid_pair` true if pairs are valid, false if not.
+#define macro PAIRING(input_ptr) = returns (1) {
     // Store negate(proof_a), proof_b, alpha_1, beta_2, vk_x, gamma_2, proof_c, delta_2 in memory
     
     // This is disgusting, but more efficient than the loop because we will always need to check
@@ -243,73 +228,73 @@
 
     // Store negate(proof_a), proof_b @ 0x420
     <input_ptr> dup1
-    NEGATE()              // [input_ptr]
-    mload                 // [proof_a_0]
-    0x160 mstore          // []
-    <input_ptr> 0x20 add  // [input_ptr + 0x20]
-    mload                 // [proof_a_1]
-    0x180 mstore          // []
+    NEGATE()                      // [input_ptr]
+    mload                         // [proof_a_0]
+    0x160 mstore                  // []
+    <input_ptr> 0x20 add          // [input_ptr + 0x20]
+    mload                         // [proof_a_1]
+    0x180 mstore                  // []
 
-    <input_ptr> 0x40 add  // [input_ptr + 0x40]
-    mload                 // [proof_b_0_0]
-    0x1A0 mstore          // []
-    <input_ptr> 0x60 add  // [input_ptr + 0x60]
-    mload                 // [proof_b_0_1]
-    0x1C0 mstore          // []
-    <input_ptr> 0x80 add  // [input_ptr + 0x80]
-    mload                 // [proof_b_1_0]
-    0x1E0 mstore          // []
-    <input_ptr> 0xA0 add  // [input_ptr + 0xA0]
-    mload                 // [proof_b_1_1]
-    0x200 mstore          // []
+    <input_ptr> 0x40 add          // [input_ptr + 0x40]
+    mload                         // [proof_b_0_0]
+    0x1A0 mstore                  // []
+    <input_ptr> 0x60 add          // [input_ptr + 0x60]
+    mload                         // [proof_b_0_1]
+    0x1C0 mstore                  // []
+    <input_ptr> 0x80 add          // [input_ptr + 0x80]
+    mload                         // [proof_b_1_0]
+    0x1E0 mstore                  // []
+    <input_ptr> 0xA0 add          // [input_ptr + 0xA0]
+    mload                         // [proof_b_1_1]
+    0x200 mstore                  // []
 
     // Store alpha_1, beta_2, @ 0x4E0
-    0xC0                  // [0xC0, vkey_offset]
-    __tablestart(VKEY)    // [vkey_offset]
-    0x220 codecopy        // []
+    0xC0                          // [0xC0, vkey_offset]
+    __tablestart(VKEY)            // [vkey_offset]
+    0x220 codecopy                // []
 
     // Store vk_x, gamma_2, @ 0x5A0
-    [VK_X_PTR] mload      // [vk_x_0]
-    0x2E0 mstore          // []
+    [VK_X_PTR] mload              // [vk_x_0]
+    0x2E0 mstore                  // []
     // TODO: No need to do this addition at runtime
-    [VK_X_PTR] 0x20 add   // [VK_X_PTR + 0x20]
-    mload                 // [vk_x_1]
-    0x300 mstore          // []
+    [VK_X_PTR] 0x20 add           // [VK_X_PTR + 0x20]
+    mload                         // [vk_x_1]
+    0x300 mstore                  // []
 
-    0x80                  // [0x80]
-    __tablestart(VKEY)    // [vkey_offset, 0x80]
-    0xC0 add              // [0xE0 + vkey_offset, 0x80]
-    0x320 codecopy        // []
+    0x80                          // [0x80]
+    __tablestart(VKEY)            // [vkey_offset, 0x80]
+    0xC0 add                      // [0xE0 + vkey_offset, 0x80]
+    0x320 codecopy                // []
 
     // Store proof_c, delta_2, @ 0x660
-    <input_ptr> 0xC0 add  // [input_ptr + 0xC0]
-    mload                 // [proof_c_0]
-    0x3A0 mstore          // []
-    <input_ptr> 0xE0 add  // [input_ptr + 0xE0]
-    mload                 // [proof_c_1]
-    0x3C0 mstore          // []
+    <input_ptr> 0xC0 add          // [input_ptr + 0xC0]
+    mload                         // [proof_c_0]
+    0x3A0 mstore                  // []
+    <input_ptr> 0xE0 add          // [input_ptr + 0xE0]
+    mload                         // [proof_c_1]
+    0x3C0 mstore                  // []
 
-    0x80                  // [0x80]
-    __tablestart(VKEY)    // [vkey_offset, 0x80]
-    0x140 add             // [0x140 + vkey_offset, 0x80]
-    0x3E0 codecopy        // []
+    0x80                          // [0x80]
+    __tablestart(VKEY)            // [vkey_offset, 0x80]
+    0x140 add                     // [0x140 + vkey_offset, 0x80]
+    0x3E0 codecopy                // []
 
-    0x20 0x00             // [0x00, 0x20]
-    0x300 0x160           // [0x420, 0x300, 0x00, 0x20]
-    0x08 gas              // [gas, ec_pairing_precompile, 0x420, 0x300, 0x00, 0x20]
-    staticcall            // [success]
-    continue jumpi        // []
+    0x20 0x00                     // [0x00, 0x20]
+    0x300 0x160                   // [0x420, 0x300, 0x00, 0x20]
+    0x08 gas                      // [gas, ec_pairing_precompile, 0x420, 0x300, 0x00, 0x20]
+    staticcall                    // [success]
+    continue jumpi                // []
 
     // TODO: Custom revert message on failure
     0x00 dup1 revert
     
     continue:
-        returndatasize    // [size]
-        0x00 dup1         // [0x00, 0x00, size]
-        returndatacopy    // []
-        0x00 mload        // [is_valid_pair]
+        returndatasize            // [size]
+        0x00 dup1                 // [0x00, 0x00, size]
+        returndatacopy            // []
+        0x00 mload                // [is_valid_pair]
 
-    // Return stack:         [is_valid_pair]
+    // Return stack:                 [is_valid_pair]
 }
 
 ////////////////////////////////////////////////////////////////
@@ -323,47 +308,57 @@
     0x2d4d9aa7e302d9df41749d5507949d05dbea33fbb16c643b22f599a2be6df2e214bedd503c37ceb061d8ec60209fe345ce89830a19230301f076caff004d19260967032fcbf776d1afc985f88877f182d38480a653f2decaa9794cbc3bf3060c0e187847ad4c798374d0d6732bf501847dd68bc0e071241e0213bc7fc13db7ab304cfbd1e08a704a99f5e847d93f8c3caafddec46b7a0d379da69a4d112346a71739c1b1a457a8c7313123d24d2f9192f896b7c63eea05a9d57f06547ad0cec8198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c21800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed090689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa1bdb443ce61ebcf93daed4215a57e1cec90ca64973023e31197a112e8cee72f6117e26c4235f42625b3404f2973059814ff260dba7176d7aae910f493a8e1fb5196e247a12f580e36894f256f0c122393489b4c213b3e913250feee806ca45ff2fedff4e4bbcbf9f1c56e28a060d50eef5f54e2aab897f6b465acd2ed005ae910000000000000000000000000000000000000000000000000000000000000002118dae3da1177eb655a9552f549ffe7632f2fd8b2441c249ff4990cddacca0e4245d2c94e3da47af845ffd61dfb5fa4444fb143fc48ca2b5bc1951612ab0c5110cb2b31aee687125d71f6165066f306a58535f6b497e17af0409090a6dda913a26b62d3a66665cfb459e9fd9e3474edae1413471ac00644f18cf5e3768806480
 }
 
-/// @notice Writes the ICs to memory at `ptr`
-/// @param `ptr` The memory location to write the IC
+/// @notice Writes the ICs stored in the runtime code to memory at `ptr`
+///
+/// - SAFETY:
+///     Overwrites memory from [0xC0:(0xE0+n_ics*0x40)]
 #define macro MSTORE_IC() = {
     IC_LEN()
-    0x40 mul            // [ic_len * 0x40]
-    __tablestart(VKEY)  // [VKEY_start, ic_size]
-    0x1e0 add           // [ic_ptr + VKEY_start, ic_size]
-    [IC_PTR]            // [0x00, ic_ptr + VKEY_start, ic_size]
-    codecopy            // []
+    0x40 mul                      // [ic_len * 0x40]
+    __tablestart(VKEY)            // [VKEY_start, ic_size]
+    0x1e0 add                     // [ic_ptr + VKEY_start, ic_size]
+    [IC_PTR]                      // [0x00, ic_ptr + VKEY_start, ic_size]
+    codecopy                      // []
 
-    // Return stack:       []
+    // Return stack:                 []
 }
 
-/// @notice Gets the number of ICs from the runtime code
-/// @dev Stores the ICs in memory at [0x1c0:0x1c0 + ic_len * 0x20]
+/// @notice Writes the number of ICs from the VKey stored in the runtime code
+///         to memory.
+///
+/// - SAFETY:
+///     Overwrites memory from [0xC0:0xE0]
 #define macro IC_LEN() = {
-    0x20                // [0x20]
-    __tablestart(VKEY)  // [vkey_offset, 0x20]
-    0x1c0 add           // [vkey_offset + ic_len_ptr, 0x20]
-    [IC_LEN_PTR] codecopy // []
-    [IC_LEN_PTR] mload  // [ic_len]
+    0x20                          // [0x20]
+    __tablestart(VKEY)            // [vkey_offset, 0x20]
+    0x1c0 add                     // [vkey_offset + ic_len_ptr, 0x20]
+    [IC_LEN_PTR] codecopy         // []
+    [IC_LEN_PTR] mload            // [ic_len]
 }
 
+/// @param `input_ptr` Pointer to verification inputs in memory
 /// @notice Verifies a SNARK proof. (Internal macro)
-/// @return `bool` True if proof is valid, false if not.
+/// @return `bool` True if proof is valid, false if not
+/// @dev `input_ptr` *MUST* be greater than or equal to 0xE0+n_ics*0x40+0x300
 ///
 /// - SAFETY:
 ///     MEMORY RESERVATIONS:
 ///     [0x00:0x80] - Scratch
 ///     [0x80:0xC0] - vk_x
-///     [0xC0:(n_inputs * 0x40)] - ICs
+///     [0xC0:(0xE0+n_ics*0x40)] - ICs
+///     [(0xE0+n_ics*0x40):(0xE0+n_ics*0x40+0x300)] - Pairing Inputs
+///     [>= 0xE0+n_ics*0x40+0x300] - Verification Inputs (proof, public inputs)
+///     
 #define macro VERIFY(input_ptr) = returns (1) {
-    // Stores the verification key in memory @ [0x1C0:]
-    MSTORE_IC(0x1c0)        // []
+    // Stores the IC in memory @ [0xC0:(0xE0+n_ics*0x40)]
+    MSTORE_IC()                   // []
     // Push the snark scalar to the stack
-    [SNARK_SCALAR]          // [snark_scalar]
+    [SNARK_SCALAR]                // [snark_scalar]
 
-    <input_ptr> 0x100 add mload // [input_len, snark_scalar]
-    0x01 add                // [input_len + 1, snark_scalar]
-    [IC_LEN_PTR] mload eq   // [input_len + 1 == IC_length, snark_scalar]
-    start_verify jumpi      // [snark_scalar]
+    <input_ptr> 0x100 add mload   // [input_len, snark_scalar]
+    0x01 add                      // [input_len + 1, snark_scalar]
+    [IC_LEN_PTR] mload eq         // [input_len + 1 == IC_length, snark_scalar]
+    start_verify jumpi            // [snark_scalar]
 
     fail:
         // TODO: Custom revert message on failure
@@ -373,47 +368,47 @@
     start_verify:
         // Compute the linear combination vk_x
         // 0x260-0x2A0 reserved for the result.
-        <input_ptr>         // [input_ptr, snark_scalar]
-        0x120 add           // [input_ptr + 0x120, snark_scalar]
+        <input_ptr>               // [input_ptr, snark_scalar]
+        0x120 add                 // [input_ptr + 0x120, snark_scalar]
         <input_ptr> 0x100 add mload   // [input_len, input_ptr + 0x20, snark_scalar]
-        0x00                // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+        0x00                      // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
         linear_combination:
             // Load input[i] onto the stack
-            dup1 dup4 add   // [input_ptr + 0x20 + loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            dup1            // [cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            mload           // [input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup1 dup4 add         // [input_ptr + 0x20 + loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup1                  // [cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            mload                 // [input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             // require(input[i] < snark_scalar)
-            dup6            // [snark_scalar, input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            gt iszero       // [snark_scalar <= input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            fail jumpi      // [cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup6                  // [snark_scalar, input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            gt iszero             // [snark_scalar <= input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            fail jumpi            // [cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             // Scalar mul IC[i + 1], input[i]
-            [IC_PTR_SECOND] // [ic_ptr_2, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            dup3 add        // [ic_ptr_2 + loop_offset, cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            [IC_PTR_SECOND]       // [ic_ptr_2, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup3 add              // [ic_ptr_2 + loop_offset, cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             // Store scalar mul result in scratch space @ 0x00
-            SCALAR_MUL()    // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            SCALAR_MUL()          // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
-            [VK_X_PTR]      // [vk_x_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            ADDITION_2()    // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            [VK_X_PTR]            // [vk_x_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            ADDITION_2()          // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             // Increase loop index
-            0x20 add        // [loop_offset + 0x20, input_len, input_ptr + 0x20, snark_scalar]
+            0x20 add              // [loop_offset + 0x20, input_len, input_ptr + 0x20, snark_scalar]
 
             // Check if the loop is complete
-            dup1 dup3       // [input_len, loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]  
-            gt              // [input_len > loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup1 dup3             // [input_len, loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]  
+            gt                    // [input_len > loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
             // Continue combination loop
             linear_combination jumpi
 
             // Add the point in IC[0] to `vk_x`
-            [IC_PTR]        // [ic_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            [VK_X_PTR]      // [vk_x_ptr, ic_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            ADDITION()      // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            PAIRING(<input_ptr>) // [is_valid_pair]
+            [IC_PTR]              // [ic_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            [VK_X_PTR]            // [vk_x_ptr, ic_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            ADDITION()            // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            PAIRING(<input_ptr>)  // [is_valid_pair]
 
-    // Return stack:                [is_valid_pair]
+    // Return stack:                 [is_valid_pair]
 }
 
 #[calldata("0x0fa55097071458e4e105175cafdd75c0b4c6f639227db56ab908050dc99c62200ac50ef419a1e1f29f5ff0d1898af514a36bc42ba970fd503060a6123c6d8f6c23cfed79e17316667872d9377d23c9553321bf162b566facf05f262fe1a534ca0a658672d02e119820017f116b913ec347182ba17b24416b683bee1d07a200db2c9661cac208dc71f2b5f48f4ed82b224056fb2fba1ff9792ec96bf3ea9a6f921c8e9ccb3fffcda4e6df7f2fa8f8f767c3fb868493d36788df6977f1001802f72038751350aad5781c0e5c1f245d75d6ea198ca6bc42440ae1fc74ee9984192106ab85db3cf7d039bb4da84c2d6137ff93c3490a79146548949d1531a3455353000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000010000000000000000000000001ff21c6915ad88eeac3d49abc8dc2e95b1f6b496")]
