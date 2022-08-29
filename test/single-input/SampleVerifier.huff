@@ -15,23 +15,55 @@
 /// - [ ] Tests for multi-constraint proofs & fail cases.
 /// - [ ] Clean and update comments. (Double check stack comments)
 /// - [ ] Start optimizing and make a external template for `huffv` to use.
-/// - [x] Update `huffv`.
 /// - [ ] Optimizations.
+/// - [ ] Finish `huffv`.
 /// - [ ] Huff tests.
 /// - [ ] Add documentation / README.
 
 /// SAFETY:
 ///
-/// - MEMORY LAYOUT ON `VERIFY` EXECUTION:
-/// +-------------------------------------------+--------------------------------------------+
-/// |               Offset Range                |                  Contents                  |
-/// +-------------------------------------------+--------------------------------------------+
-/// | 0x00:0x80                                 | Scratch Space                              |
-/// | 0x80:0xC0                                 | vk_x (G1 Point)                            |
-/// | 0xC0:(0xE0+n_ics*0x40)                    | ICs                                        |
-/// | (0xE0+n_ics*0x40):(0xE0+n_ics*0x40+0x300) | Pairing Inputs                             |
-/// | >= 0xE0+n_ics*0x40+0x300                  | Verification Inputs (proof, public inputs) |
-/// +-------------------------------------------+--------------------------------------------+
+/// Memory Layout (Total Expansion: 0x4E0 + n_ics * 0x40 + 0x20 * n_inputs)
+/// |- [G1] Points take up 64 bytes
+/// |- [G2] Points take up 128 bytes
+/// |
+/// |--[0x00:0x80] Scratch Space
+/// |
+/// |--[0x80:0xC0] [G1] vk_x
+/// |
+/// |--[0xC0:(0xC0 + n_ics * 0x40)] ICs
+/// |   |--[0x00]               [G1] IC_0
+/// |   |--[...]
+/// |   `--[(n_ics - 1) * 0x40] [G1] IC_n
+/// |
+/// |--[(0xC0 + n_ics * 0x40):(0xC0 + n_ics * 0x40 + 0x300)] ecPairing Precompile Inputs
+/// |   |--[0x00:0xC0] Pair 1
+/// |   |   |--[0x00] [G1] NEGATE(proof_a)
+/// |   |   `--[0x40] [G2] proof_b
+/// |   |--[0xC0:0x180] Pair 2
+/// |   |   |--[0xC0]  [G1] alpha
+/// |   |   `--[0x100] [G2] beta
+/// |   |--[0x180:0x240] Pair 3
+/// |   |   |--[0x180] [G1] vk_x
+/// |   |   `--[0x1C0] [G2] gamma
+/// |   `--[0x180:0x240] Pair 4
+/// |       |--[0x240] [G1] proof_c
+/// |       `--[0x280] [G2] delta
+/// |
+/// `--[(>= 0xC0+n_ics*0x40+0x300):(0x4E0 + n_ics * 0x40 + 0x20 * n_inputs)] VERIFY macro Inputs
+///     |--[0x00:0x100] Proof
+///     |   |--[0x00]  a_0
+///     |   |--[0x20]  a_1
+///     |   |--[0x40]  b_0_0
+///     |   |--[0x60]  b_0_1
+///     |   |--[0x80]  b_1_0
+///     |   |--[0xA0]  b_1_1
+///     |   |--[0xC0]  c_0
+///     |   `--[0xE0]  c_1
+///     `--[0x120 + n_inputs * 0x20] Public Inputs
+///         |--[0x100] n_inputs
+///         |--[0x120] input[0]
+///         |--[...]
+///         `--[0x100 + n_inputs] input[n]
 
 /// @notice The snark scalar field.
 #define constant SNARK_SCALAR = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001
@@ -46,10 +78,10 @@
 #define constant IC_BYTES = 0x80
 
 /// @notice The location of the first element of the `IC` portion of the verification key in memory.
-#define constant IC_PTR = 0xe0
+#define constant IC_PTR = 0xc0
 
 /// @notice The location of the second element of the `IC` portion of the verification key in memory.
-#define constant IC_PTR_SECOND = 0x120
+#define constant IC_PTR_SECOND = 0x100
 
 /// @notice The location of `vk_x` in memory
 #define constant VK_X_PTR = 0x80
@@ -233,63 +265,63 @@
 #define macro PAIRING(input_ptr) = returns (1) {
     // TODO: Can perform input_ptr offset calcs at compile time if we restrict
     //       `input_ptr`'s offset to directly after the pairing inputs instead
-    //       of allowing anywhere >= 0xE0+n_ics*0x40+0x300
+    //       of allowing anywhere >= 0xC0+n_ics*0x40+0x300
 
-    // Store negate(proof_a), proof_b @ 0x160
+    // Store negate(proof_a), proof_b @ 0x140
     <input_ptr> dup1
     NEGATE()                      // [input_ptr]
     mload                         // [proof_a_0]
-    0x160 mstore                  // []
+    0x140 mstore                  // []
     <input_ptr> 0x20 add          // [input_ptr + 0x20]
     mload                         // [proof_a_1]
-    0x180 mstore                  // []
+    0x160 mstore                  // []
 
     <input_ptr> 0x40 add          // [input_ptr + 0x40]
     mload                         // [proof_b_0_0]
-    0x1a0 mstore                  // []
+    0x180 mstore                  // []
     <input_ptr> 0x60 add          // [input_ptr + 0x60]
     mload                         // [proof_b_0_1]
-    0x1c0 mstore                  // []
+    0x1a0 mstore                  // []
     <input_ptr> 0x80 add          // [input_ptr + 0x80]
     mload                         // [proof_b_1_0]
-    0x1e0 mstore                  // []
+    0x1c0 mstore                  // []
     <input_ptr> 0xA0 add          // [input_ptr + 0xA0]
     mload                         // [proof_b_1_1]
-    0x200 mstore                  // []
+    0x1e0 mstore                  // []
 
-    // Store alpha_1, beta_2, @ 0x220
+    // Store alpha_1, beta_2, @ 0x200
     0xC0                          // [0xC0, vkey_offset]
     __tablestart(VKEY)            // [vkey_offset]
-    0x220 codecopy                // []
+    0x200 codecopy                // []
 
-    // Store vk_x, gamma_2, @ 0x2e0
+    // Store vk_x, gamma_2, @ 0x2c0
     [VK_X_PTR] mload              // [vk_x_0]
-    0x2e0 mstore                  // []
+    0x2c0 mstore                  // []
     // TODO: No need to do this addition at runtime
     [VK_X_PTR] 0x20 add           // [VK_X_PTR + 0x20]
     mload                         // [vk_x_1]
-    0x300 mstore                  // []
+    0x2e0 mstore                  // []
 
     0x80                          // [0x80]
     __tablestart(VKEY)            // [vkey_offset, 0x80]
-    0xC0 add                      // [0xE0 + vkey_offset, 0x80]
-    0x320 codecopy                // []
+    0xC0 add                      // [0xc0 + vkey_offset, 0x80]
+    0x300 codecopy                // []
 
-    // Store proof_c, delta_2, @ 0x3a0
+    // Store proof_c, delta_2, @ 0x380
     <input_ptr> 0xC0 add          // [input_ptr + 0xC0]
     mload                         // [proof_c_0]
-    0x3a0 mstore                  // []
+    0x380 mstore                  // []
     <input_ptr> 0xE0 add          // [input_ptr + 0xE0]
     mload                         // [proof_c_1]
-    0x3c0 mstore                  // []
+    0x3a0 mstore                  // []
 
     0x80                          // [0x80]
     __tablestart(VKEY)            // [vkey_offset, 0x80]
     0x140 add                     // [0x140 + vkey_offset, 0x80]
-    0x3e0 codecopy                // []
+    0x3c0 codecopy                // []
 
     0x20 0x00                     // [0x00, 0x20]
-    0x300 0x160                    // [pi_0, 0x300, 0x00, 0x20]
+    0x300 0x140                    // [pi_0, 0x300, 0x00, 0x20]
     [EC_PAIR] gas                 // [gas, ec_pairing_precompile, pi_0, 0x300, 0x00, 0x20]
     staticcall                    // [success]
     continue jumpi                // []
@@ -320,7 +352,7 @@
 /// @notice Writes the ICs stored in the runtime code to memory at `ptr`
 ///
 /// - SAFETY:
-///     Overwrites memory from [0xC0:(0xE0+n_ics*0x40)]
+///     Overwrites memory from [0xC0:(0xC0+n_ics*0x40)]
 #define macro MSTORE_IC() = {
     [IC_BYTES]
     __tablestart(VKEY)            // [VKEY_start, ic_size]
@@ -331,8 +363,8 @@
     // Return stack:                 []
 }
 
-/// @param `input_ptr` Pointer to verification inputs in memory
 /// @notice Verifies a SNARK proof. (Internal macro)
+/// @param `input_ptr` Pointer to verification inputs in memory
 /// @return `bool` True if proof is valid, false if not
 /// @dev `input_ptr` *MUST* be greater than or equal to 0xE0+n_ics*0x40+0x300
 ///
@@ -340,11 +372,11 @@
 ///     MEMORY RESERVATIONS:
 ///     [0x00:0x80] - Scratch
 ///     [0x80:0xC0] - vk_x
-///     [0xC0:(0xE0+n_ics*0x40)] - ICs
-///     [(0xE0+n_ics*0x40):(0xE0+n_ics*0x40+0x300)] - Pairing Inputs
-///     [>= 0xE0+n_ics*0x40+0x300] - Verification Inputs (proof, public inputs)
+///     [0xC0:(0xC0+n_ics*0x40)] - ICs
+///     [(0xC0+n_ics*0x40):(0xC0+n_ics*0x40+0x300)] - Pairing Inputs
+///     [>= 0xC0+n_ics*0x40+0x300] - Verification Inputs (proof, public inputs)
 #define macro VERIFY(input_ptr) = returns (1) {
-    // Stores the IC in memory @ [0xC0:(0xE0+n_ics*0x40)]
+    // Stores the IC in memory @ 0xC0
     MSTORE_IC()                   // []
     // Push the snark scalar to the stack
     [SNARK_SCALAR]                // [snark_scalar]

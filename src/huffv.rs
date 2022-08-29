@@ -139,7 +139,7 @@ fn main() {
 
 
                     // Fill pairing input offsets
-                    let pairing_input_offset = 0xE0 + n_ics * 0x40;
+                    let pairing_input_offset = 0xC0 + n_ics * 0x40;
                     (0..PI_OFFSET_BASES.len()).for_each(|i| {
                         let tag = format!("{{{{pi_{}}}}}", i);
                         contract = contract.replace(&tag, &format!("0x{:02x}", pairing_input_offset + PI_OFFSET_BASES[i]));
