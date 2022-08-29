@@ -30,13 +30,13 @@
 #define constant SNARK_SCALAR = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001
 
 /// @notice The location of the `IC` portion of the verification key's length in memory.
-#define constant IC_LEN_PTR = 0x1e0
+#define constant IC_LEN_PTR = 0x380
 
 /// @notice The location of the first element of the `IC` portion of the verification key in memory.
-#define constant IC_PTR = 0x200
+#define constant IC_PTR = 0x3A0
 
 /// @notice The location of the second element of the `IC` portion of the verification key in memory.
-#define constant IC_PTR_SECOND = 0x220
+#define constant IC_PTR_SECOND = 0x3E0
 
 /// @notice The location of `vk_x` in memory
 #define constant VK_X_PTR = 0x80
@@ -45,9 +45,9 @@
 #define macro P1(ptr) = {
     // Input stack:        []
 
-    __tablestart(G1)    // [G1_start]
-    __tablesize(G1)     // [G1_size, G1_start]
-    <ptr>               // [0x00, G1_size, G1_start]
+    __tablesize(G1)     // [G1_size]
+    __tablestart(G1)    // [G1_start, G1_size]
+    <ptr>               // [0x00, G1_start, G1_size]
     codecopy            // []
 
     // Return stack:       []
@@ -57,9 +57,9 @@
 #define macro P2(ptr) = {
     // Input stack:        []
 
-    __tablestart(G2)    // [G2_start]
-    __tablesize(G2)     // [G2_size, G2_start]
-    <ptr>               // [0x00, G2_size, G2_start]
+    __tablesize(G2)     // [G2_size]
+    __tablestart(G2)    // [G2_start, G2_size]
+    <ptr>               // [0x00, G1_start, G2_size]
     codecopy            // []
 
     // Return stack:       []
@@ -225,62 +225,69 @@
 // We only need paringProd4 for the pairing check.
 #define macro PAIRING(input_ptr) = returns(1) {
     // Store negate(proof_a), proof_b, alpha_1, beta_2, vk_x, gamma_2, proof_c, delta_2 in memory
-    // This is disgusting, but efficient.
+    
+    // This is disgusting, but more efficient than the loop because we will always need to check
+    // 4 pairs.
+
+    // TODO: Update mem pointers to fit reservations & sanity check
+    // vkey is stored from 0x1c0:0x420
+
+    // __tablesize(VKEY)
 
     // Store negate(proof_a), proof_b @ 0x320
     NEGATE(<input_ptr>)   // []
     <input_ptr> mload     // [proof_a_0]
-    0x320 mstore          // []
+    0x420 mstore          // []
     <input_ptr> 0x20 add  // [input_ptr + 0x20]
-    0x340 mstore          // []
+    0x440 mstore          // []
 
     <input_ptr> 0x40 add  // [input_ptr + 0x40]
     mload                 // [proof_b_0_0]
-    0x360 mstore          // []
+    0x460 mstore          // []
     <input_ptr> 0x60 add  // [input_ptr + 0x60]
     mload                 // [proof_b_0_1]
-    0x380 mstore          // []
+    0x480 mstore          // []
     <input_ptr> 0x80 add  // [input_ptr + 0x80]
     mload                 // [proof_b_1_0]
-    0x3A0 mstore          // []
+    0x4A0 mstore          // []
     <input_ptr> 0xA0 add  // [input_ptr + 0xA0]
     mload                 // [proof_b_1_1]
-    0x3C0 mstore          // []
+    0x4C0 mstore          // []
 
     // Store alpha_1, beta_2, @ 0x3E0
-    __tablestart(VKEY)    // [vkey_offset]
     0xC0                  // [0xC0, vkey_offset]
-    0x3E0 codecopy        // []
+    __tablestart(VKEY)    // [vkey_offset]
+    0x4E0 codecopy        // []
 
     // Store vk_x, gamma_2, @ 0x4A0
     [VK_X_PTR] mload      // [vk_x_0]
-    0x4A0 mstore          // []
+    0x5A0 mstore          // []
     // TODO: No need to do this addition at runtime
     [VK_X_PTR] 0x20 add   // [VK_X_PTR + 0x20]
     mload                 // [vk_x_1]
     0x4C0 mstore          // []
 
-    __tablestart(VKEY)    // [vkey_offset]
-    0xE0 add              // [0xE0 + vkey_offset]
-    0x80                  // [0x80, 0xE0 + vkey_offset]
-    0x4E0 codecopy        // []
+    0x80                  // [0x80]
+    __tablestart(VKEY)    // [vkey_offset, 0x80]
+    0xE0 add              // [0xE0 + vkey_offset, 0x80]
+    0x5E0 codecopy        // []
 
     // Store proof_c, delta_2, @ 0x560
     <input_ptr> 0xC0 add  // [input_ptr + 0xC0]
     mload                 // [proof_c_0]
-    0x560 mstore          // []
+    0x660 mstore          // []
     <input_ptr> 0xE0 add  // [input_ptr + 0xE0]
     mload                 // [proof_c_1]
-    0x580 mstore          // []
+    0x680 mstore          // []
 
-    __tablestart(VKEY)    // [vkey_offset]
-    0x140 add             // [0x140 + vkey_offset]
-    0x80                  // [0x80, 0x140 + vkey_offset]
-    0x5A0 codecopy        // []
+    0x80                  // [0x80]
+    __tablestart(VKEY)    // [vkey_offset, 0x80]
+    0x140 add             // [0x140 + vkey_offset, 0x80]
+    0x6A0 codecopy        // []
 
     0x20 0x00             // [0x00, 0x20]
-    0x300 0x320           // [0x320, 0x300, 0x00, 0x20]
-    0x08 gas              // [gas, ec_pairing_precompile, 0x320, 0x300, 0x00, 0x20]
+    0x300 0x420           // [0x420, 0x300, 0x00, 0x20]
+    0x08 gas              // [gas, ec_pairing_precompile, 0x420, 0x300, 0x00, 0x20]
     staticcall            // [success]
     continue jumpi        // []
 
@@ -308,12 +315,11 @@
 }
 
 /// @notice Writes the verification key to memory at `ptr`
-/// @dev The memory layout is as follows:
 #define macro MSTORE_VKEY(ptr) = {
     // Input stack:        []
 
-    __tablestart(VKEY)  // [VKEY_start]
-    __tablesize(VKEY)   // [VKEY_size, VKEY_start]
+    __tablesize(VKEY)   // [VKEY_start]
+    __tablestart(VKEY)  // [VKEY_start, VKEY_size]
     <ptr>               // [0x00, VKEY_size, VKEY_start]
     codecopy            // []
 
@@ -326,16 +332,15 @@
 ///     MEMORY RESERVATIONS:
 ///     [0x00:0x80] - Scratch Space
 ///     [0x80:0x1C0] - vk_x
-///     [0x1C0:0x320] - Verification key
+///     [0x1C0:(0x400 + n_inputs * 0x20)] - Verification key
 #define macro VERIFY(input_ptr) = returns (1) {
-    // Stores the verification key in memory [0x1C0:0x320]
-    MSTORE_VKEY(0x00)       // []
+    // Stores the verification key in memory @ [0x1C0:]
+    MSTORE_VKEY(0x1C0)      // []
     // Push the snark scalar to the stack
     [SNARK_SCALAR]          // [snark_scalar]
 
     <input_ptr> mload       // [input_len, snark_scalar]
     0x01 add                // [input_len + 1, snark_scalar]
-    // TODO: IC length can be dynamic, I think.
     [IC_LEN_PTR] mload eq   // [input_len + 1 == IC_length, snark_scalar]
     start_verify jumpi      // [snark_scalar]
 
@@ -363,20 +368,19 @@
             mload           // [input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             // require(input[i] < snark_scalar)
-            dup5            // [snark_scalar, input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup6            // [snark_scalar, input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
             gt iszero       // [snark_scalar <= input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
             fail jumpi      // [cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             // Scalar mul IC[i + 1], input[i]
-            dup1            // [cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            [IC_PTR_SECOND] // [ic_ptr_2, cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            add             // [ic_ptr_2 + cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            [IC_PTR_SECOND] // [ic_ptr_2, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup3 add        // [ic_ptr_2 + loop_offset, cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             // Store scalar mul result in scratch space @ 0x00
             SCALAR_MUL()    // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             [VK_X_PTR]      // [vk_x_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            ADDITION_2()    // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]]
+            ADDITION_2()    // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             // Increase loop index
             0x20 add        // [loop_offset + 0x20, input_len, input_ptr + 0x20, snark_scalar]
@@ -388,5 +392,6 @@
             [VK_X_PTR]      // [vk_x_ptr, ic_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
             ADDITION()      // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
+            // ...
             PAIRING(<input_ptr>) // [is_valid_pair]
 }

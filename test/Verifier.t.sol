@@ -10,7 +10,7 @@ interface IHuffVerifier {
     function addition(Pairing.G1Point memory a, Pairing.G1Point memory b) external view returns (Pairing.G1Point memory r);
     function scalar_mul(Pairing.G1Point memory p, uint s) external view returns (Pairing.G1Point memory r);
     function pairing(Pairing.G1Point[] memory p1, Pairing.G2Point[] memory p2) external view returns (bool);
-    function verify(uint[2] memory a, uint[2][2] memory b, uint[2] memory c, uint[1] memory input) external view returns (bool);
+    function verify(uint[2] memory a, uint[2][2] memory b, uint[2] memory c, uint[] memory input) external view returns (bool);
 }
 
 contract VerifierTest is Test {
@@ -88,11 +88,10 @@ contract VerifierTest is Test {
             0x06ab85db3cf7d039bb4da84c2d6137ff93c3490a79146548949d1531a3455353
         ];
 
-        uint[1] memory inputs = [uint(182377969136052884622247920755931704678273168534)];
-
-        emit log_named_bytes("Encoded a", abi.encodeWithSelector(0x2fa8ea6d, a, b, c, inputs));
-
-        assertEq(verifier.verifyProof(a, b, c, inputs), true);
+        uint[] memory inputs = new uint[](1);
+        inputs[0] = uint(182377969136052884622247920755931704678273168534);
+        
         assertEq(huffVerifier.verify(a, b, c, inputs), true);
+        assertEq(verifier.verifyProof(a, b, c, inputs), true);
     }
 }
