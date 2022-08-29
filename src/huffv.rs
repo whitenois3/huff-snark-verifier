@@ -42,23 +42,24 @@ struct VerificationKey {
 }
 
 impl VerificationKey {
+    /// TODO: Allow for multiple constraints!!
     pub fn to_packed(&self) -> String {
         format!(
             "0x{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
             Self::encode_num(&self.vk_alpha_1[0]),
             Self::encode_num(&self.vk_alpha_1[1]),
-            Self::encode_num(&self.vk_beta_2[0][0]),
             Self::encode_num(&self.vk_beta_2[0][1]),
-            Self::encode_num(&self.vk_beta_2[1][0]),
+            Self::encode_num(&self.vk_beta_2[0][0]),
             Self::encode_num(&self.vk_beta_2[1][1]),
-            Self::encode_num(&self.vk_gamma_2[0][0]),
+            Self::encode_num(&self.vk_beta_2[1][0]),
             Self::encode_num(&self.vk_gamma_2[0][1]),
-            Self::encode_num(&self.vk_gamma_2[1][0]),
+            Self::encode_num(&self.vk_gamma_2[0][0]),
             Self::encode_num(&self.vk_gamma_2[1][1]),
-            Self::encode_num(&self.vk_delta_2[0][0]),
+            Self::encode_num(&self.vk_gamma_2[1][0]),
             Self::encode_num(&self.vk_delta_2[0][1]),
-            Self::encode_num(&self.vk_delta_2[1][0]),
+            Self::encode_num(&self.vk_delta_2[0][0]),
             Self::encode_num(&self.vk_delta_2[1][1]),
+            Self::encode_num(&self.vk_delta_2[1][0]),
             Self::encode_num(&self.ic.len().to_string()),
             Self::encode_num(&self.ic[0][0]),
             Self::encode_num(&self.ic[0][1]),
