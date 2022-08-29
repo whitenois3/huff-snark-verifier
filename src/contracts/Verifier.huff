@@ -378,11 +378,6 @@
         <input_ptr> 0x100 add mload   // [input_len, input_ptr + 0x20, snark_scalar]
         0x00                // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
         linear_combination:
-            // Check if the loop is complete
-            dup1 dup3       // [input_len, loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]  
-            gt iszero       // [input_len <= loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            post_loop jumpi // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-
             // Load input[i] onto the stack
             dup1 dup4 add   // [input_ptr + 0x20 + loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
             dup1            // [cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
@@ -405,16 +400,20 @@
 
             // Increase loop index
             0x20 add        // [loop_offset + 0x20, input_len, input_ptr + 0x20, snark_scalar]
+
+            // Check if the loop is complete
+            dup1 dup3       // [input_len, loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]  
+            gt              // [input_len > loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
             // Continue combination loop
-            linear_combination jump
-        post_loop:
+            linear_combination jumpi
+
             // Add the point in IC[0] to `vk_x`
             [IC_PTR]        // [ic_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
             [VK_X_PTR]      // [vk_x_ptr, ic_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
             ADDITION()      // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-
-            // ...
             PAIRING(<input_ptr>) // [is_valid_pair]
+
+    // Return stack:                [is_valid_pair]
 }
 
 #[calldata("0x0fa55097071458e4e105175cafdd75c0b4c6f639227db56ab908050dc99c62200ac50ef419a1e1f29f5ff0d1898af514a36bc42ba970fd503060a6123c6d8f6c23cfed79e17316667872d9377d23c9553321bf162b566facf05f262fe1a534ca0a658672d02e119820017f116b913ec347182ba17b24416b683bee1d07a200db2c9661cac208dc71f2b5f48f4ed82b224056fb2fba1ff9792ec96bf3ea9a6f921c8e9ccb3fffcda4e6df7f2fa8f8f767c3fb868493d36788df6977f1001802f72038751350aad5781c0e5c1f245d75d6ea198ca6bc42440ae1fc74ee9984192106ab85db3cf7d039bb4da84c2d6137ff93c3490a79146548949d1531a3455353000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000010000000000000000000000001ff21c6915ad88eeac3d49abc8dc2e95b1f6b496")]
