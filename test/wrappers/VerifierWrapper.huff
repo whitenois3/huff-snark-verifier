@@ -3,6 +3,7 @@
 #define constant NEGATE_SIG = 0xfb6b9e9a
 #define constant ADDITION_SIG = 0xd20decd2
 #define constant SCALAR_MUL_SIG = 0xa5e57a5e
+#define constant VERIFY_SIG = 0x2fa8ea6d
 
 #define macro NEGATE_WRAPPER() = {
     0x40 0x04 0x00 calldatacopy
@@ -18,7 +19,7 @@
     0x00 0x40                   // [0x40, 0x00]
     ADDITION()                  // []
 
-    0x40 0x2e0 return
+    0x40 0x80 return
 }
 
 #define macro SCALAR_MUL_WRAPPER() = {
@@ -31,11 +32,21 @@
     0x40 0x00 return
 }
 
+#define macro VERIFY_WRAPPER() = {
+    0xE0 0x04 0x620 calldatacopy // []
+
+    VERIFY(0x620)
+
+    0x00 mstore
+    0x20 0x00 return
+}
+
 #define macro MAIN() = {
     pc calldataload 0xE0 shr
     dup1 [NEGATE_SIG] eq negate jumpi
     dup1 [ADDITION_SIG] eq addition jumpi
     dup1 [SCALAR_MUL_SIG] eq scalar_mul jumpi
+    dup1 [VERIFY_SIG] eq verify jumpi
 
     0x00 dup1 revert
 
@@ -45,4 +56,6 @@
         ADDITION_WRAPPER()
     scalar_mul:
         SCALAR_MUL_WRAPPER()
+    verify:
+        VERIFY_WRAPPER()
 }

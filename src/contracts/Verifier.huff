@@ -36,10 +36,10 @@
 #define constant IC_PTR = 0x200
 
 /// @notice The location of the second element of the `IC` portion of the verification key in memory.
-#define constant IC_PTR_PLUS_1 = 0x220
+#define constant IC_PTR_SECOND = 0x220
 
 /// @notice The location of `vk_x` in memory
-#define constant VK_X_PTR = 0x2e0
+#define constant VK_X_PTR = 0x80
 
 /// @dev Stores the generator point of G1 in memory at ptr.
 #define macro P1(ptr) = {
@@ -103,7 +103,7 @@
 /// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes).
 /// @param `ptr_b` - Memory pointer to the input point `b` (64 bytes).
 /// @dev Calls the ecAdd precompile with the G1 points `a` and `b`. Writes
-///      64 byte result to memory @ VK_X_PTR (0x2e0).
+///      64 byte result to memory @ VK_X_PTR (0x80).
 /// 
 /// - SAFETY:
 ///      Overwrites scratch memory from [0x00:0x80]
@@ -131,9 +131,9 @@
 
     // The `ADDITION` macro is *only* used for the linear combination on the
     // vk_x g1 point in the `VERIFY` macro. Because of this, the output memory
-    // location of the staticcall is hardcoded to 0x2E0. 
+    // location of the staticcall is hardcoded to 0x80. 
     0x40 [VK_X_PTR]     // [vk_x_ptr, 0x40]
-    0x80 0x00           // [0x00, 0x80, vk_x_ptr, 0x40]
+    dup1 0x00           // [0x00, 0x80, vk_x_ptr, 0x40]
     // TODO: Sub 2000 from gas / add invalid op on failure?
     0x06 gas            // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
     staticcall          // [success]
@@ -149,7 +149,7 @@
 
 /// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes).
 /// @dev Calls the ecAdd precompile with the G1 points `a` and `b`. Writes
-///      64 byte result to memory @ VK_X_PTR (0x2e0).
+///      64 byte result to memory @ VK_X_PTR (0x80).
 ///      
 ///      This macro is a secondary version of `ADDITION` that is only used in the
 ///      linear combination loop. The result of a `SCALAR_MUL` call is always
@@ -175,9 +175,9 @@
 
     // The `ADDITION_2` macro is *only* used for the linear combination on the
     // vk_x g1 point in the `VERIFY` macro. Because of this, the output memory
-    // location of the staticcall is hardcoded to 0x2E0. 
+    // location of the staticcall is hardcoded to 0x80. 
     0x40 [VK_X_PTR]     // [vk_x_ptr, 0x40]
-    0x80 0x00           // [0x00, 0x80, vk_x_ptr, 0x40]
+    dup1 0x00           // [0x00, 0x80, vk_x_ptr, 0x40]
     // TODO: Sub 2000 from gas / add invalid op on failure?
     0x06 gas            // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
     staticcall          // [success]
@@ -223,20 +223,88 @@
 }
 
 // We only need paringProd4 for the pairing check.
-// #define macro PAIRING(ptr_p1, ptr_p2) = {
-//     <ptr_p1> mload
-//     <ptr_p2> mload
-//     eq
-// }
+#define macro PAIRING(input_ptr) = returns(1) {
+    // Store negate(proof_a), proof_b, alpha_1, beta_2, vk_x, gamma_2, proof_c, delta_2 in memory
+    // This is disgusting, but efficient.
 
-// ...
+    // Store negate(proof_a), proof_b @ 0x320
+    NEGATE(<input_ptr>)   // []
+    <input_ptr> mload     // [proof_a_0]
+    0x320 mstore          // []
+    <input_ptr> 0x20 add  // [input_ptr + 0x20]
+    0x340 mstore          // []
+
+    <input_ptr> 0x40 add  // [input_ptr + 0x40]
+    mload                 // [proof_b_0_0]
+    0x360 mstore          // []
+    <input_ptr> 0x60 add  // [input_ptr + 0x60]
+    mload                 // [proof_b_0_1]
+    0x380 mstore          // []
+    <input_ptr> 0x80 add  // [input_ptr + 0x80]
+    mload                 // [proof_b_1_0]
+    0x3A0 mstore          // []
+    <input_ptr> 0xA0 add  // [input_ptr + 0xA0]
+    mload                 // [proof_b_1_1]
+    0x3C0 mstore          // []
+
+    // Store alpha_1, beta_2, @ 0x3E0
+    __tablestart(VKEY)    // [vkey_offset]
+    0xC0                  // [0xC0, vkey_offset]
+    0x3E0 codecopy        // []
+
+    // Store vk_x, gamma_2, @ 0x4A0
+    [VK_X_PTR] mload      // [vk_x_0]
+    0x4A0 mstore          // []
+    // TODO: No need to do this addition at runtime
+    [VK_X_PTR] 0x20 add   // [VK_X_PTR + 0x20]
+    mload                 // [vk_x_1]
+    0x4C0 mstore          // []
+
+    __tablestart(VKEY)    // [vkey_offset]
+    0xE0 add              // [0xE0 + vkey_offset]
+    0x80                  // [0x80, 0xE0 + vkey_offset]
+    0x4E0 codecopy        // []
+
+    // Store proof_c, delta_2, @ 0x560
+    <input_ptr> 0xC0 add  // [input_ptr + 0xC0]
+    mload                 // [proof_c_0]
+    0x560 mstore          // []
+    <input_ptr> 0xE0 add  // [input_ptr + 0xE0]
+    mload                 // [proof_c_1]
+    0x580 mstore          // []
+
+    __tablestart(VKEY)    // [vkey_offset]
+    0x140 add             // [0x140 + vkey_offset]
+    0x80                  // [0x80, 0x140 + vkey_offset]
+    0x5A0 codecopy        // []
+
+    0x20 0x00             // [0x00, 0x20]
+    0x300 0x320           // [0x320, 0x300, 0x00, 0x20]
+    0x08 gas              // [gas, ec_pairing_precompile, 0x320, 0x300, 0x00, 0x20]
+    staticcall            // [success]
+    continue jumpi        // []
+
+    // TODO: Custom revert message on failure
+    0x00 dup1 revert
+    
+    continue:
+        returndatasize    // [size]
+        0x00 dup1         // [0x00, 0x00, size]
+        returndatacopy    // []
+        0x00 mload        // [is_valid_pair]
+
+    // Return stack:         [is_valid_pair]
+}
+
+////////////////////////////////////////////////////////////////
+//                          VERIFIER                          //
+////////////////////////////////////////////////////////////////
 
 /// @notice The verification key of the SNARK.
 /// @dev This value is filled by the `huffv` binary, and it is packed with no
-///      periphery information (i.e. "AlphaBetaGammaDeltaIC"). See the comment
-///      of `MSTORE_VKEY` for more information.
+///      periphery information (i.e. "Alpha|Beta|Gamma|Delta|IC_len|IC").
 #define table VKEY {
-    // {{placeholder}}
+    0x2d4d9aa7e302d9df41749d5507949d05dbea33fbb16c643b22f599a2be6df2e214bedd503c37ceb061d8ec60209fe345ce89830a19230301f076caff004d19260e187847ad4c798374d0d6732bf501847dd68bc0e071241e0213bc7fc13db7ab0967032fcbf776d1afc985f88877f182d38480a653f2decaa9794cbc3bf3060c1739c1b1a457a8c7313123d24d2f9192f896b7c63eea05a9d57f06547ad0cec8304cfbd1e08a704a99f5e847d93f8c3caafddec46b7a0d379da69a4d112346a71800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c212c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa090689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b117e26c4235f42625b3404f2973059814ff260dba7176d7aae910f493a8e1fb51bdb443ce61ebcf93daed4215a57e1cec90ca64973023e31197a112e8cee72f62fedff4e4bbcbf9f1c56e28a060d50eef5f54e2aab897f6b465acd2ed005ae91196e247a12f580e36894f256f0c122393489b4c213b3e913250feee806ca45ff0000000000000000000000000000000000000000000000000000000000000002118dae3da1177eb655a9552f549ffe7632f2fd8b2441c249ff4990cddacca0e4245d2c94e3da47af845ffd61dfb5fa4444fb143fc48ca2b5bc1951612ab0c5110cb2b31aee687125d71f6165066f306a58535f6b497e17af0409090a6dda913a26b62d3a66665cfb459e9fd9e3474edae1413471ac00644f18cf5e3768806480
 }
 
 /// @notice Writes the verification key to memory at `ptr`
@@ -252,13 +320,15 @@
     // Return stack:       []
 }
 
+/// @notice Verifies a SNARK proof. (Internal macro)
+/// @return `bool` True if proof is valid, false if not.
 /// - SAFETY:
 ///     MEMORY RESERVATIONS:
 ///     [0x00:0x80] - Scratch Space
-///     [0x80:0x2E0] - Verification key
-///     [0x2E0:0x320] - vk_x
-#define macro VERIFY(input_ptr) = {
-    // Stores the verification key in memory [0x80:0x2E0]
+///     [0x80:0x1C0] - vk_x
+///     [0x1C0:0x320] - Verification key
+#define macro VERIFY(input_ptr) = returns (1) {
+    // Stores the verification key in memory [0x1C0:0x320]
     MSTORE_VKEY(0x00)       // []
     // Push the snark scalar to the stack
     [SNARK_SCALAR]          // [snark_scalar]
@@ -266,7 +336,7 @@
     <input_ptr> mload       // [input_len, snark_scalar]
     0x01 add                // [input_len + 1, snark_scalar]
     // TODO: IC length can be dynamic, I think.
-    0x02 eq                 // [input_len + 1 == 2, snark_scalar]
+    [IC_LEN_PTR] mload eq   // [input_len + 1 == IC_length, snark_scalar]
     start_verify jumpi      // [snark_scalar]
 
     fail:
@@ -299,8 +369,8 @@
 
             // Scalar mul IC[i + 1], input[i]
             dup1            // [cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            [IC_PTR_PLUS_1] // [ic_ptr, cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            add             // [ic_ptr + cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            [IC_PTR_SECOND] // [ic_ptr_2, cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            add             // [ic_ptr_2 + cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             // Store scalar mul result in scratch space @ 0x00
             SCALAR_MUL()    // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
@@ -318,14 +388,5 @@
             [VK_X_PTR]      // [vk_x_ptr, ic_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
             ADDITION()      // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
-            // pairingProd4
-}
-
-/// @notice Verifies a SNARK proof.
-/// @return `bool` True if proof is valid, false if not.
-#define macro VERIFY_PROOF() = {
-    MSTORE_VKEY(0x00)   // []
-    [SNARK_SCALAR]      // [snark_scalar]
-
-    // TODO
+            PAIRING(<input_ptr>) // [is_valid_pair]
 }
