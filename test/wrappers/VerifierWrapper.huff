@@ -6,6 +6,7 @@
 #define constant VERIFY_SIG = 0x2612907c
 
 #define macro NEGATE_WRAPPER() = {
+    // Copy the point into scratch space
     0x40 0x04 0x00 calldatacopy
     0x00 NEGATE()
 

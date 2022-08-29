@@ -1,6 +1,5 @@
 /// @title Huff Snark Verifier
 /// @notice A gas-optimized, purpose-driven snark verification contract.
-///
 ///         This contract is based off of Verification.sol by Christian Reitwiessner.
 ///
 /// @author clabby <https://github.com/clabby>
@@ -11,14 +10,15 @@
 ///
 /// TODO:
 /// - [x] Don't store entire vkey in memory. Only store the ICs and codecopy other items in `PAIRING`.
-/// - [ ] Make `PAIRING` macro work with multiple constraints.
+/// - [x] Make `PAIRING` macro work with multiple constraints.
+/// - [ ] Restrict input pointer to 0xE0+n_ics*0x40+0x300 (?)
 /// - [ ] Tests for multi-constraint proofs & fail cases.
 /// - [ ] Clean and update comments. (Double check stack comments)
 /// - [ ] Start optimizing and make a external template for `huffv` to use.
-/// - [ ] Update `huffv`.
+/// - [x] Update `huffv`.
 /// - [ ] Optimizations.
 /// - [ ] Huff tests.
-/// - [ ] Add documentation.
+/// - [ ] Add documentation / README.
 
 /// SAFETY:
 ///
@@ -36,11 +36,14 @@
 /// @notice The snark scalar field.
 #define constant SNARK_SCALAR = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001
 
-/// @notice The prime q in the base field F_q for G1
+/// @notice The prime q in the base field F_q for G1.
 #define constant Q = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47
 
-/// @notice The location of the `IC` portion of the verification key's length in memory.
-#define constant IC_LEN_PTR = 0xc0
+/// @notice The number of ICs in the verification key.
+#define constant N_ICS = {{N_ICS}}
+
+/// @notice The byte size of the ICs in the verification key.
+#define constant IC_BYTES = {{IC_BYTES}}
 
 /// @notice The location of the first element of the `IC` portion of the verification key in memory.
 #define constant IC_PTR = 0xe0
@@ -50,6 +53,15 @@
 
 /// @notice The location of `vk_x` in memory
 #define constant VK_X_PTR = 0x80
+
+/// @notice The `ecAdd` precompile
+#define constant EC_ADD = 0x06
+
+/// @notice The `ecMul` precompile
+#define constant EC_MUL = 0x07
+
+/// @notice The `ecPairing` precompile
+#define constant EC_PAIR = 0x08
 
 /// @notice Writes the negation of the passed point to memory at `ptr`
 /// @param `ptr` - Memory pointer to the input G1 g1_point_ptr
@@ -120,7 +132,7 @@
     0x40 [VK_X_PTR]               // [vk_x_ptr, 0x40]
     dup1 0x00                     // [0x00, 0x80, vk_x_ptr, 0x40]
     // TODO: Sub 2000 from gas / add invalid op on failure?
-    0x06 gas                      // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
+    [EC_ADD] gas                  // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
     staticcall                    // [success]
     continue jumpi                // []
 
@@ -164,7 +176,7 @@
     0x40 [VK_X_PTR]               // [vk_x_ptr, 0x40]
     dup1 0x00                     // [0x00, 0x80, vk_x_ptr, 0x40]
     // TODO: Sub 2000 from gas / add invalid op on failure?
-    0x06 gas                      // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
+    [EC_ADD] gas                  // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
     staticcall                    // [success]
     continue jumpi                // []
 
@@ -198,7 +210,7 @@
     0x40 0x00                     // [0x00, 0x40]
     0x60 dup2                     // [0x00, 0x60, 0x00, 0x40]
     // TODO: Sub 2000 from gas / add invalid op on failure?
-    0x07 gas                      // [gas, ec_add_precompile, out_ptr, 0x60, out_ptr, 0x40]
+    [EC_MUL] gas                  // [gas, ec_mul_precompile, out_ptr, 0x60, out_ptr, 0x40]
     staticcall                    // [success]
     continue jumpi                // []
 
@@ -211,77 +223,74 @@
 }
 
 /// @notice Calls the `ecPairing` precompile with the following arguments:
-///         - NEGATE(proof_a), proof_b
-///         - alpha_1, beta_2
-///         - vk_x, gamma_2
-///         - proof_c, delta_2
-/// @dev Because this macro is used *only* in the `VERIFY` macro and the, 
-///      the inputs to the `ecPairing` precompile are hard-coded.
+///         1. NEGATE(proof_a), proof_b
+///         2. alpha_1, beta_2
+///         3. vk_x, gamma_2
+///         4. proof_c, delta_2
+/// @dev Because this macro is used *only* in the `VERIFY` macro the, inputs
+///      to the `ecPairing` precompile are hard-coded.
 /// @return `is_valid_pair` true if pairs are valid, false if not.
 #define macro PAIRING(input_ptr) = returns (1) {
-    // Store negate(proof_a), proof_b, alpha_1, beta_2, vk_x, gamma_2, proof_c, delta_2 in memory
-    
-    // This is disgusting, but more efficient than the loop because we will always need to check
-    // 4 pairs.
+    // TODO: Can perform input_ptr offset calcs at compile time if we restrict
+    //       `input_ptr`'s offset to directly after the pairing inputs instead
+    //       of allowing anywhere >= 0xE0+n_ics*0x40+0x300
 
-    // TODO: Make it work with dynamic input size!!
-
-    // Store negate(proof_a), proof_b @ 0x420
+    // Store negate(proof_a), proof_b @ {{pi_0}}
     <input_ptr> dup1
     NEGATE()                      // [input_ptr]
     mload                         // [proof_a_0]
-    0x160 mstore                  // []
+    {{pi_0}} mstore                  // []
     <input_ptr> 0x20 add          // [input_ptr + 0x20]
     mload                         // [proof_a_1]
-    0x180 mstore                  // []
+    {{pi_1}} mstore                  // []
 
     <input_ptr> 0x40 add          // [input_ptr + 0x40]
     mload                         // [proof_b_0_0]
-    0x1A0 mstore                  // []
+    {{pi_2}} mstore                  // []
     <input_ptr> 0x60 add          // [input_ptr + 0x60]
     mload                         // [proof_b_0_1]
-    0x1C0 mstore                  // []
+    {{pi_3}} mstore                  // []
     <input_ptr> 0x80 add          // [input_ptr + 0x80]
     mload                         // [proof_b_1_0]
-    0x1E0 mstore                  // []
+    {{pi_4}} mstore                  // []
     <input_ptr> 0xA0 add          // [input_ptr + 0xA0]
     mload                         // [proof_b_1_1]
-    0x200 mstore                  // []
+    {{pi_5}} mstore                  // []
 
-    // Store alpha_1, beta_2, @ 0x4E0
+    // Store alpha_1, beta_2, @ {{pi_6}}
     0xC0                          // [0xC0, vkey_offset]
     __tablestart(VKEY)            // [vkey_offset]
-    0x220 codecopy                // []
+    {{pi_6}} codecopy                // []
 
-    // Store vk_x, gamma_2, @ 0x5A0
+    // Store vk_x, gamma_2, @ {{pi_7}}
     [VK_X_PTR] mload              // [vk_x_0]
-    0x2E0 mstore                  // []
+    {{pi_7}} mstore                  // []
     // TODO: No need to do this addition at runtime
     [VK_X_PTR] 0x20 add           // [VK_X_PTR + 0x20]
     mload                         // [vk_x_1]
-    0x300 mstore                  // []
+    {{pi_8}} mstore                  // []
 
     0x80                          // [0x80]
     __tablestart(VKEY)            // [vkey_offset, 0x80]
     0xC0 add                      // [0xE0 + vkey_offset, 0x80]
-    0x320 codecopy                // []
+    {{pi_9}} codecopy                // []
 
-    // Store proof_c, delta_2, @ 0x660
+    // Store proof_c, delta_2, @ {{pi_10}}
     <input_ptr> 0xC0 add          // [input_ptr + 0xC0]
     mload                         // [proof_c_0]
-    0x3A0 mstore                  // []
+    {{pi_10}} mstore                  // []
     <input_ptr> 0xE0 add          // [input_ptr + 0xE0]
     mload                         // [proof_c_1]
-    0x3C0 mstore                  // []
+    {{pi_11}} mstore                  // []
 
     0x80                          // [0x80]
     __tablestart(VKEY)            // [vkey_offset, 0x80]
     0x140 add                     // [0x140 + vkey_offset, 0x80]
-    0x3E0 codecopy                // []
+    {{pi_12}} codecopy                // []
 
     0x20 0x00                     // [0x00, 0x20]
-    0x300 0x160                   // [0x420, 0x300, 0x00, 0x20]
-    0x08 gas                      // [gas, ec_pairing_precompile, 0x420, 0x300, 0x00, 0x20]
+    0x300 {{pi_0}}                    // [pi_0, 0x300, 0x00, 0x20]
+    [EC_PAIR] gas                 // [gas, ec_pairing_precompile, pi_0, 0x300, 0x00, 0x20]
     staticcall                    // [success]
     continue jumpi                // []
 
@@ -305,7 +314,7 @@
 /// @dev This value is filled by the `huffv` binary, and it is packed with no
 ///      periphery information (i.e. "Alpha|Beta|Gamma|Delta|IC_len|IC").
 #define table VKEY {
-    0x2d4d9aa7e302d9df41749d5507949d05dbea33fbb16c643b22f599a2be6df2e214bedd503c37ceb061d8ec60209fe345ce89830a19230301f076caff004d19260967032fcbf776d1afc985f88877f182d38480a653f2decaa9794cbc3bf3060c0e187847ad4c798374d0d6732bf501847dd68bc0e071241e0213bc7fc13db7ab304cfbd1e08a704a99f5e847d93f8c3caafddec46b7a0d379da69a4d112346a71739c1b1a457a8c7313123d24d2f9192f896b7c63eea05a9d57f06547ad0cec8198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c21800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed090689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa1bdb443ce61ebcf93daed4215a57e1cec90ca64973023e31197a112e8cee72f6117e26c4235f42625b3404f2973059814ff260dba7176d7aae910f493a8e1fb5196e247a12f580e36894f256f0c122393489b4c213b3e913250feee806ca45ff2fedff4e4bbcbf9f1c56e28a060d50eef5f54e2aab897f6b465acd2ed005ae910000000000000000000000000000000000000000000000000000000000000002118dae3da1177eb655a9552f549ffe7632f2fd8b2441c249ff4990cddacca0e4245d2c94e3da47af845ffd61dfb5fa4444fb143fc48ca2b5bc1951612ab0c5110cb2b31aee687125d71f6165066f306a58535f6b497e17af0409090a6dda913a26b62d3a66665cfb459e9fd9e3474edae1413471ac00644f18cf5e3768806480
+    {{PACKED_VKEY}}
 }
 
 /// @notice Writes the ICs stored in the runtime code to memory at `ptr`
@@ -313,27 +322,13 @@
 /// - SAFETY:
 ///     Overwrites memory from [0xC0:(0xE0+n_ics*0x40)]
 #define macro MSTORE_IC() = {
-    IC_LEN()
-    0x40 mul                      // [ic_len * 0x40]
+    [IC_BYTES]
     __tablestart(VKEY)            // [VKEY_start, ic_size]
-    0x1e0 add                     // [ic_ptr + VKEY_start, ic_size]
-    [IC_PTR]                      // [0x00, ic_ptr + VKEY_start, ic_size]
+    0x1e0 add                     // [0x1e0 + VKEY_start, ic_size]
+    [IC_PTR]                      // [IC_PTR, ic_ptr + VKEY_start, ic_size]
     codecopy                      // []
 
     // Return stack:                 []
-}
-
-/// @notice Writes the number of ICs from the VKey stored in the runtime code
-///         to memory.
-///
-/// - SAFETY:
-///     Overwrites memory from [0xC0:0xE0]
-#define macro IC_LEN() = {
-    0x20                          // [0x20]
-    __tablestart(VKEY)            // [vkey_offset, 0x20]
-    0x1c0 add                     // [vkey_offset + ic_len_ptr, 0x20]
-    [IC_LEN_PTR] codecopy         // []
-    [IC_LEN_PTR] mload            // [ic_len]
 }
 
 /// @param `input_ptr` Pointer to verification inputs in memory
@@ -348,7 +343,6 @@
 ///     [0xC0:(0xE0+n_ics*0x40)] - ICs
 ///     [(0xE0+n_ics*0x40):(0xE0+n_ics*0x40+0x300)] - Pairing Inputs
 ///     [>= 0xE0+n_ics*0x40+0x300] - Verification Inputs (proof, public inputs)
-///     
 #define macro VERIFY(input_ptr) = returns (1) {
     // Stores the IC in memory @ [0xC0:(0xE0+n_ics*0x40)]
     MSTORE_IC()                   // []
@@ -357,7 +351,7 @@
 
     <input_ptr> 0x100 add mload   // [input_len, snark_scalar]
     0x01 add                      // [input_len + 1, snark_scalar]
-    [IC_LEN_PTR] mload eq         // [input_len + 1 == IC_length, snark_scalar]
+    [N_ICS] eq                    // [input_len + 1 == n_ics, snark_scalar]
     start_verify jumpi            // [snark_scalar]
 
     fail:
@@ -367,7 +361,6 @@
     // input_len + 1 == IC_length
     start_verify:
         // Compute the linear combination vk_x
-        // 0x260-0x2A0 reserved for the result.
         <input_ptr>               // [input_ptr, snark_scalar]
         0x120 add                 // [input_ptr + 0x120, snark_scalar]
         <input_ptr> 0x100 add mload   // [input_len, input_ptr + 0x20, snark_scalar]
@@ -393,10 +386,12 @@
             [VK_X_PTR]            // [vk_x_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
             ADDITION_2()          // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
-            // Increase loop index
+            // Increase loop offset
             0x20 add              // [loop_offset + 0x20, input_len, input_ptr + 0x20, snark_scalar]
 
             // Check if the loop is complete
+            // TODO: Fix this- input_len is a length and loop_offset is a mem offset. This
+            //       will cause problems when we start testing proofs with multiple ICs.
             dup1 dup3             // [input_len, loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]  
             gt                    // [input_len > loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
             // Continue combination loop
@@ -409,16 +404,4 @@
             PAIRING(<input_ptr>)  // [is_valid_pair]
 
     // Return stack:                 [is_valid_pair]
-}
-
-#[calldata("0x0fa55097071458e4e105175cafdd75c0b4c6f639227db56ab908050dc99c62200ac50ef419a1e1f29f5ff0d1898af514a36bc42ba970fd503060a6123c6d8f6c23cfed79e17316667872d9377d23c9553321bf162b566facf05f262fe1a534ca0a658672d02e119820017f116b913ec347182ba17b24416b683bee1d07a200db2c9661cac208dc71f2b5f48f4ed82b224056fb2fba1ff9792ec96bf3ea9a6f921c8e9ccb3fffcda4e6df7f2fa8f8f767c3fb868493d36788df6977f1001802f72038751350aad5781c0e5c1f245d75d6ea198ca6bc42440ae1fc74ee9984192106ab85db3cf7d039bb4da84c2d6137ff93c3490a79146548949d1531a3455353000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000010000000000000000000000001ff21c6915ad88eeac3d49abc8dc2e95b1f6b496")]
-#define test VERIFY_TEST() = {
-    0x100 0x00 0x6A0 calldatacopy // []
-    0x120 calldatasize sub        // [cd_size - 0x124]
-    0x120                         // [0x124, cd_size - 0x124]
-    0x6A0 0x100 add calldatacopy
-
-    VERIFY(0x6A0)                 // [is_valid_proof]
-    0x00 mstore                   // []
-    0x20 0x00 return
 }
