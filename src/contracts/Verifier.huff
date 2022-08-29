@@ -8,6 +8,17 @@
 /// TODO: Use safe math. Alternatively, we can verify that the input to
 ///       `verify` & `verifyProof` is valid to save gas. Will need to do
 ///       some safety documentation if we go that route.
+///
+/// TODO:
+/// - [ ] Don't store entire vkey in memory. Only store the ICs and codecopy other items in `PAIRING`.
+/// - [ ] Make `PAIRING` macro work with multiple constraints.
+/// - [ ] Tests for multi-constraint proofs & fail cases.
+/// - [ ] Clean and update comments.
+/// - [ ] Start optimizing and make a external template for `huffv` to use.
+/// - [ ] Update `huffv`.
+/// - [ ] Optimizations.
+/// - [ ] Huff tests.
+/// - [ ] Add documentation.
 
 /// @notice Generator point for G1
 #define table G1 = {
