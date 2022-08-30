@@ -5,22 +5,6 @@
 ///
 /// @author clabby <https://github.com/clabby>
 
-/// TODO: Use safe math. Alternatively, we can verify that the input to
-///       `verify` & `verifyProof` is valid to save gas. Will need to do
-///       some safety documentation if we go that route.
-///
-/// TODO:
-/// - [x] Don't store entire vkey in memory. Only store the ICs and codecopy other items in `PAIRING`.
-/// - [x] Make `PAIRING` macro work with multiple constraints.
-/// - [x] Restrict input pointer to 0xC0+n_ics*0x40+0x300
-/// - [x] Tests for multi-constraint proofs & fail cases.
-/// - [ ] Clean and update comments. (Double check stack comments)
-/// - [ ] Optimizations.
-/// - [ ] Finish `huffv`.
-/// - [ ] External verification function template.
-/// - [ ] Huff tests.
-/// - [ ] Add documentation / README.
-
 /// SAFETY:
 ///
 /// Memory Layout (Total Expansion: 0x4E0 + n_ics * 0x40 + 0x20 * n_inputs)
@@ -122,17 +106,18 @@
     // Input stack:                  [g1_point_ptr]
 
     dup1 mload                    // [p_x, g1_point_ptr]
-    dup2 0x20 add                 // [g1_point_ptr + 0x20, p_x, g1_point_ptr]
-    mload                         // [p_y, p_x, g1_point_ptr]
+    [Q]                           // [Q, p_x, g1_point_ptr]
+    dup3 0x20 add                 // [g1_point_ptr + 0x20, Q, p_x, g1_point_ptr]
+    mload                         // [p_y, Q, p_x, g1_point_ptr]
 
-    dup1 iszero                   // [p_y == 0, p_y, p_x, g1_point_ptr]
-    dup3 iszero                   // [p_x == 0, p_y == 0, p_y, p_x, g1_point_ptr]
-    and                           // [p_x == 0 & p_y == 0, p_y, p_x, g1_point_ptr]
+    dup1 iszero                   // [p_y == 0, p_y, Q, p_x, g1_point_ptr]
+    dup4 iszero                   // [p_x == 0, p_y == 0, p_y, Q, p_x, g1_point_ptr]
+    and                           // [p_x == 0 & p_y == 0, p_y, Q, p_x, g1_point_ptr]
 
     // The passed point is already zero, do nothing.
-    clean_stack jumpi             // [p_y, p_x, g1_point_ptr]
+    clean_stack jumpi             // [p_y, Q, p_x, g1_point_ptr]
 
-    [Q] swap1 mod                 // [p_y % Q, p_x, g1_point_ptr]
+    mod                           // [p_y % Q, p_x, g1_point_ptr]
     [Q] sub                       // [Q - (p_y % Q), p_x, g1_point_ptr]
     dup3 0x20 add                 // [g1_point_ptr + 0x20, Q - (p_y % Q), p_x, g1_point_ptr]
     mstore                        // [p_x, g1_point_ptr]
@@ -386,8 +371,8 @@
 /// @notice Verifies a SNARK proof. (Internal macro)
 /// @param `input_ptr` Pointer to verification inputs in memory
 /// @return `bool` True if proof is valid, false if not
-/// @dev `input_ptr` *MUST* be greater than or equal to 0xE0+n_ics*0x40+0x300
-///      See memory diagram at the top of the contract.
+/// @dev Please see the memory diagram at the top of the contract before
+///      using this macro.
 #define macro VERIFY() = returns (1) {
     // Input stack:                  []
 
@@ -414,8 +399,7 @@
         linear_combination:
             // Load input[i] onto the stack
             dup1 dup4 add         // [input_ptr + 0x20 + loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            dup1                  // [cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            mload                 // [input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup1 mload            // [input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             // require(input[i] < snark_scalar)
             dup6                  // [snark_scalar, input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]

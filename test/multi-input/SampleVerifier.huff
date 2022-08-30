@@ -5,22 +5,6 @@
 ///
 /// @author clabby <https://github.com/clabby>
 
-/// TODO: Use safe math. Alternatively, we can verify that the input to
-///       `verify` & `verifyProof` is valid to save gas. Will need to do
-///       some safety documentation if we go that route.
-///
-/// TODO:
-/// - [x] Don't store entire vkey in memory. Only store the ICs and codecopy other items in `PAIRING`.
-/// - [x] Make `PAIRING` macro work with multiple constraints.
-/// - [x] Restrict input pointer to 0xC0+n_ics*0x40+0x300
-/// - [x] Tests for multi-constraint proofs & fail cases.
-/// - [ ] Clean and update comments. (Double check stack comments)
-/// - [ ] Optimizations.
-/// - [ ] Finish `huffv`.
-/// - [ ] External verification function template.
-/// - [ ] Huff tests.
-/// - [ ] Add documentation / README.
-
 /// SAFETY:
 ///
 /// Memory Layout (Total Expansion: 0x4E0 + n_ics * 0x40 + 0x20 * n_inputs)
@@ -122,17 +106,18 @@
     // Input stack:                  [g1_point_ptr]
 
     dup1 mload                    // [p_x, g1_point_ptr]
-    dup2 0x20 add                 // [g1_point_ptr + 0x20, p_x, g1_point_ptr]
-    mload                         // [p_y, p_x, g1_point_ptr]
+    [Q]                           // [Q, p_x, g1_point_ptr]
+    dup3 0x20 add                 // [g1_point_ptr + 0x20, Q, p_x, g1_point_ptr]
+    mload                         // [p_y, Q, p_x, g1_point_ptr]
 
-    dup1 iszero                   // [p_y == 0, p_y, p_x, g1_point_ptr]
-    dup3 iszero                   // [p_x == 0, p_y == 0, p_y, p_x, g1_point_ptr]
-    and                           // [p_x == 0 & p_y == 0, p_y, p_x, g1_point_ptr]
+    dup1 iszero                   // [p_y == 0, p_y, Q, p_x, g1_point_ptr]
+    dup4 iszero                   // [p_x == 0, p_y == 0, p_y, Q, p_x, g1_point_ptr]
+    and                           // [p_x == 0 & p_y == 0, p_y, Q, p_x, g1_point_ptr]
 
     // The passed point is already zero, do nothing.
-    clean_stack jumpi             // [p_y, p_x, g1_point_ptr]
+    clean_stack jumpi             // [p_y, Q, p_x, g1_point_ptr]
 
-    [Q] swap1 mod                 // [p_y % Q, p_x, g1_point_ptr]
+    mod                           // [p_y % Q, p_x, g1_point_ptr]
     [Q] sub                       // [Q - (p_y % Q), p_x, g1_point_ptr]
     dup3 0x20 add                 // [g1_point_ptr + 0x20, Q - (p_y % Q), p_x, g1_point_ptr]
     mstore                        // [p_x, g1_point_ptr]
@@ -206,7 +191,7 @@
 ///
 /// - SAFETY:
 ///      Overwrites scratch memory from [0x40:0x80]
-///      Overwrites vk_x in memory from [VK_X_X_PTR:VK_X_X_PTR+0x40]
+///      Overwrites vk_x in memory from [VK_X_X_PTR:(VK_X_X_PTR + 0x40)]
 #define macro ADDITION_2() = takes (1) {
     // Input stack:                  [ptr_a]
 
@@ -280,6 +265,9 @@
 /// @dev Because this macro is used *only* in the `VERIFY` macro the, inputs
 ///      to the `ecPairing` precompile are hard-coded.
 /// @return `is_valid_pair` true if pairs are valid, false if not.
+///
+/// - SAFETY:
+///     Overwrites pairing inputs in memory from [(0xC0 + n_ics * 0x40):(0xC0 + n_ics * 0x40 + 0x300)]
 #define macro PAIRING() = returns (1) {
     // Input stack:                  []
 
@@ -359,7 +347,7 @@
 
 /// @notice The verification key of the SNARK.
 /// @dev This value is filled by the `huffv` binary, and it is packed with no
-///      periphery information (i.e. "Alpha|Beta|Gamma|Delta|IC_len|IC").
+///      periphery information (i.e. "Alpha|Beta|Gamma|Delta|ICs").
 #define table VKEY {
     0x2d4d9aa7e302d9df41749d5507949d05dbea33fbb16c643b22f599a2be6df2e214bedd503c37ceb061d8ec60209fe345ce89830a19230301f076caff004d19260967032fcbf776d1afc985f88877f182d38480a653f2decaa9794cbc3bf3060c0e187847ad4c798374d0d6732bf501847dd68bc0e071241e0213bc7fc13db7ab304cfbd1e08a704a99f5e847d93f8c3caafddec46b7a0d379da69a4d112346a71739c1b1a457a8c7313123d24d2f9192f896b7c63eea05a9d57f06547ad0cec8198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c21800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed090689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa1bdb443ce61ebcf93daed4215a57e1cec90ca64973023e31197a112e8cee72f6117e26c4235f42625b3404f2973059814ff260dba7176d7aae910f493a8e1fb5196e247a12f580e36894f256f0c122393489b4c213b3e913250feee806ca45ff2fedff4e4bbcbf9f1c56e28a060d50eef5f54e2aab897f6b465acd2ed005ae91000000000000000000000000000000000000000000000000000000000000000305485ff1626b69648267be351216e9183b0b1e70ad5d0560d39f464025c5b96e25501c28e0d0675f1221eb7bd5394fcc8b766ba7f66668b011c4160b1111ac4a2eb55926b0c6e5af70c4195cf19f82c9eb88a64cfbd2441874855aab65e08b8012ee91040590111d7abb205a27edbbfcd46ff527a2b87376d2983143102784262ac5ceb909ad8d6539e8e4d362b7c23f8b34ab962032578e3b2adfbab222d0da0c2258ef2d506b7a0678e8b56790c80c2235b0089c4855e87a59bf952cc9f90b
 }
@@ -367,7 +355,7 @@
 /// @notice Writes the ICs stored in the runtime code to memory at `ptr`
 ///
 /// - SAFETY:
-///     Overwrites memory from [0xC0:(0xC0+n_ics*0x40)]
+///     Overwrites memory from [0xC0:(0xC0 + n_ics * 0x40)]
 #define macro MSTORE_IC() = {
     // Input stack:                  []
 
@@ -383,8 +371,8 @@
 /// @notice Verifies a SNARK proof. (Internal macro)
 /// @param `input_ptr` Pointer to verification inputs in memory
 /// @return `bool` True if proof is valid, false if not
-/// @dev `input_ptr` *MUST* be greater than or equal to 0xE0+n_ics*0x40+0x300
-///      See memory diagram at the top of the contract.
+/// @dev Please see the memory diagram at the top of the contract before
+///      using this macro.
 #define macro VERIFY() = returns (1) {
     // Input stack:                  []
 
@@ -411,8 +399,7 @@
         linear_combination:
             // Load input[i] onto the stack
             dup1 dup4 add         // [input_ptr + 0x20 + loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            dup1                  // [cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            mload                 // [input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup1 mload            // [input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             // require(input[i] < snark_scalar)
             dup6                  // [snark_scalar, input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
