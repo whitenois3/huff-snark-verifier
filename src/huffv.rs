@@ -124,7 +124,7 @@ fn main() {
                     contract = contract.replace("{{N_ICS}}", &format!("0x{:02x}", n_ics));
                     // Fill ic_bytes
                     contract = contract.replace("{{IC_BYTES}}", &format!("0x{:02x}", n_ics * 0x40));
-
+                                        
                     // Fill pairing input offsets
                     let pairing_input_offset = 0xC0 + n_ics * 0x40;
                     (0..PI_OFFSET_BASES.len()).for_each(|i| {
@@ -132,6 +132,20 @@ fn main() {
                         contract = contract.replace(
                             &tag,
                             &format!("0x{:02x}", pairing_input_offset + PI_OFFSET_BASES[i]),
+                        );
+                    });
+
+                    // Fill public input offsets
+                    let input_ptr = pairing_input_offset + 0x300;
+                    // Fill pub_input_len_ptr constant
+                    contract = contract.replace("{{PUB_INPUT_LEN_PTR}}", &format!("0x{:02x}", input_ptr + 0x100));
+                    // Fill pub_input_ptr constant
+                    contract = contract.replace("{{PUB_INPUT_PTR}}", &format!("0x{:02x}", input_ptr + 0x120));
+                    (0..8).for_each(|i| {
+                        let tag = format!("{{{{in_{}}}}}", i);
+                        contract = contract.replace(
+                            &tag,
+                            &format!("0x{:02x}", input_ptr + i * 0x20)
                         );
                     });
 
