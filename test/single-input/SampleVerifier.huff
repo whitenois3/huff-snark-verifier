@@ -59,11 +59,15 @@
 ///     |   |--[0xA0]  b_1_1
 ///     |   |--[0xC0]  c_0
 ///     |   `--[0xE0]  c_1
-///     `--[0x120 + n_inputs * 0x20] Public Inputs
+///     `--[0x100:(0x120 + n_inputs * 0x20)] Public Inputs
 ///         |--[0x100] n_inputs
 ///         |--[0x120] input[0]
 ///         |--[...]
-///         `--[0x100 + n_inputs] input[n]
+///         `--[0x100 + n_inputs * 0x20] input[n]
+
+////////////////////////////////////////////////////////////////
+//                         CONSTANTS                          //
+////////////////////////////////////////////////////////////////
 
 /// @notice The snark scalar field.
 #define constant SNARK_SCALAR = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001
@@ -94,6 +98,10 @@
 
 /// @notice The `ecPairing` precompile
 #define constant EC_PAIR = 0x08
+
+////////////////////////////////////////////////////////////////
+//                         EC HELPERS                         //
+////////////////////////////////////////////////////////////////
 
 /// @notice Writes the negation of the passed point to memory at `ptr`
 /// @param `ptr` - Memory pointer to the input G1 g1_point_ptr
@@ -367,14 +375,7 @@
 /// @param `input_ptr` Pointer to verification inputs in memory
 /// @return `bool` True if proof is valid, false if not
 /// @dev `input_ptr` *MUST* be greater than or equal to 0xE0+n_ics*0x40+0x300
-///
-/// - SAFETY:
-///     MEMORY RESERVATIONS:
-///     [0x00:0x80] - Scratch
-///     [0x80:0xC0] - vk_x
-///     [0xC0:(0xC0+n_ics*0x40)] - ICs
-///     [(0xC0+n_ics*0x40):(0xC0+n_ics*0x40+0x300)] - Pairing Inputs
-///     [>= 0xC0+n_ics*0x40+0x300] - Verification Inputs (proof, public inputs)
+///      See memory diagram at the top of the contract.
 #define macro VERIFY(input_ptr) = returns (1) {
     // Stores the IC in memory @ 0xC0
     MSTORE_IC()                   // []
