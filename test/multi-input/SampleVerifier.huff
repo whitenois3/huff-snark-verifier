@@ -76,10 +76,10 @@
 #define constant Q = 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47
 
 /// @notice The number of ICs in the verification key.
-#define constant N_ICS = {{N_ICS}}
+#define constant N_ICS = 0x03
 
 /// @notice The byte size of the ICs in the verification key.
-#define constant IC_BYTES = {{IC_BYTES}}
+#define constant IC_BYTES = 0xc0
 
 /// @notice The location of the first element of the `IC` portion of the verification key in memory.
 #define constant IC_PTR = 0xc0
@@ -88,10 +88,10 @@
 #define constant IC_PTR_SECOND = 0x100
 
 /// @notice The location of the length of the public inputs in memory.
-#define constant PUB_INPUT_LEN_PTR = {{PUB_INPUT_LEN_PTR}}
+#define constant PUB_INPUT_LEN_PTR = 0x580
 
 /// @notice The location of the public inputs in memory.
-#define constant PUB_INPUT_PTR = {{PUB_INPUT_PTR}}
+#define constant PUB_INPUT_PTR = 0x5a0
 
 /// @notice The location of `vk_x`'s x component in memory
 #define constant VK_X_X_PTR = 0x80
@@ -282,60 +282,60 @@
 #define macro PAIRING() = returns (1) {
     // Input stack:                  []
 
-    // Store negate(proof_a), proof_b @ {{pi_0}}
-    {{in_0}} dup1                 // [input_ptr, input_ptr]
+    // Store negate(proof_a), proof_b @ 0x180
+    0x480 dup1                 // [input_ptr, input_ptr]
     NEGATE()                      // [input_ptr]
     mload                         // [proof_a_0]
-    {{pi_0}} mstore               // []
-    {{in_1}}                      // [input_ptr + 0x20]
+    0x180 mstore               // []
+    0x4a0                      // [input_ptr + 0x20]
     mload                         // [proof_a_1]
-    {{pi_1}} mstore               // []
+    0x1a0 mstore               // []
 
-    {{in_2}}                      // [input_ptr + 0x40]
+    0x4c0                      // [input_ptr + 0x40]
     mload                         // [proof_b_0_0]
-    {{pi_2}} mstore               // []
-    {{in_3}}                      // [input_ptr + 0x60]
+    0x1c0 mstore               // []
+    0x4e0                      // [input_ptr + 0x60]
     mload                         // [proof_b_0_1]
-    {{pi_3}} mstore               // []
-    {{in_4}}                      // [input_ptr + 0x80]
+    0x1e0 mstore               // []
+    0x500                      // [input_ptr + 0x80]
     mload                         // [proof_b_1_0]
-    {{pi_4}} mstore               // []
-    {{in_5}}                      // [input_ptr + 0xA0]
+    0x200 mstore               // []
+    0x520                      // [input_ptr + 0xA0]
     mload                         // [proof_b_1_1]
-    {{pi_5}} mstore               // []
+    0x220 mstore               // []
 
-    // Store alpha_1, beta_2, @ {{pi_6}}
+    // Store alpha_1, beta_2, @ 0x240
     0xC0                          // [0xC0, vkey_offset]
     __tablestart(VKEY)            // [vkey_offset]
-    {{pi_6}} codecopy             // []
+    0x240 codecopy             // []
 
-    // Store vk_x, gamma_2, @ {{pi_7}}
+    // Store vk_x, gamma_2, @ 0x300
     [VK_X_X_PTR] mload            // [vk_x_0]
-    {{pi_7}} mstore               // []
+    0x300 mstore               // []
     [VK_X_Y_PTR]                  // [VK_X_X_PTR + 0x20]
     mload                         // [vk_x_1]
-    {{pi_8}} mstore               // []
+    0x320 mstore               // []
 
     0x80                          // [0x80]
     __tablestart(VKEY)            // [vkey_offset, 0x80]
     0xC0 add                      // [0xc0 + vkey_offset, 0x80]
-    {{pi_9}} codecopy             // []
+    0x340 codecopy             // []
 
-    // Store proof_c, delta_2, @ {{pi_10}}
-    {{in_6}}                      // [input_ptr + 0xC0]
+    // Store proof_c, delta_2, @ 0x3c0
+    0x540                      // [input_ptr + 0xC0]
     mload                         // [proof_c_0]
-    {{pi_10}} mstore              // []
-    {{in_7}}                      // [input_ptr + 0xE0]
+    0x3c0 mstore              // []
+    0x560                      // [input_ptr + 0xE0]
     mload                         // [proof_c_1]
-    {{pi_11}} mstore              // []
+    0x3e0 mstore              // []
 
     0x80                          // [0x80]
     __tablestart(VKEY)            // [vkey_offset, 0x80]
     0x140 add                     // [0x140 + vkey_offset, 0x80]
-    {{pi_12}} codecopy            // []
+    0x400 codecopy            // []
 
     0x20 0x00                     // [0x00, 0x20]
-    0x300 {{pi_0}}                // [pi_0, 0x300, 0x00, 0x20]
+    0x300 0x180                // [pi_0, 0x300, 0x00, 0x20]
     [EC_PAIR] gas                 // [gas, ec_pairing_precompile, pi_0, 0x300, 0x00, 0x20]
     staticcall                    // [success]
     continue jumpi                // []
@@ -360,7 +360,7 @@
 /// @dev This value is filled by the `huffv` binary, and it is packed with no
 ///      periphery information (i.e. "Alpha|Beta|Gamma|Delta|IC_len|IC").
 #define table VKEY {
-    {{PACKED_VKEY}}
+    0x2d4d9aa7e302d9df41749d5507949d05dbea33fbb16c643b22f599a2be6df2e214bedd503c37ceb061d8ec60209fe345ce89830a19230301f076caff004d19260967032fcbf776d1afc985f88877f182d38480a653f2decaa9794cbc3bf3060c0e187847ad4c798374d0d6732bf501847dd68bc0e071241e0213bc7fc13db7ab304cfbd1e08a704a99f5e847d93f8c3caafddec46b7a0d379da69a4d112346a71739c1b1a457a8c7313123d24d2f9192f896b7c63eea05a9d57f06547ad0cec8198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c21800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed090689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa1bdb443ce61ebcf93daed4215a57e1cec90ca64973023e31197a112e8cee72f6117e26c4235f42625b3404f2973059814ff260dba7176d7aae910f493a8e1fb5196e247a12f580e36894f256f0c122393489b4c213b3e913250feee806ca45ff2fedff4e4bbcbf9f1c56e28a060d50eef5f54e2aab897f6b465acd2ed005ae91000000000000000000000000000000000000000000000000000000000000000305485ff1626b69648267be351216e9183b0b1e70ad5d0560d39f464025c5b96e25501c28e0d0675f1221eb7bd5394fcc8b766ba7f66668b011c4160b1111ac4a2eb55926b0c6e5af70c4195cf19f82c9eb88a64cfbd2441874855aab65e08b8012ee91040590111d7abb205a27edbbfcd46ff527a2b87376d2983143102784262ac5ceb909ad8d6539e8e4d362b7c23f8b34ab962032578e3b2adfbab222d0da0c2258ef2d506b7a0678e8b56790c80c2235b0089c4855e87a59bf952cc9f90b
 }
 
 /// @notice Writes the ICs stored in the runtime code to memory at `ptr`
@@ -447,3 +447,4 @@
 
     // Return stack:                 [is_valid_pair]
 }
+

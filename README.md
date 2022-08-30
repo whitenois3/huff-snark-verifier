@@ -30,11 +30,15 @@ huffc ./Verifier.huff -b
 ```
 
 ## Testing
-To run tests for this repo, you will need [forge](https://github.com/foundry-rs/foundry) and the [rust toolchain](https://www.rust-lang.org/tools/install) installed.
+To run tests for this repo, you will need [forge](https://github.com/foundry-rs/foundry),
+[huffc](https://github.com/huff-language/huff-rs), and the [rust toolchain](https://www.rust-lang.org/tools/install) installed.
 
 ```sh
 # Regenerate single-input verification contract from template
 cargo run --bin huffv ./test/single-input/sample_verification_key.json > ./test/single-input/SampleVerifier.huff
+
+# Regenerate multi-input verification contract from template
+cargo run --bin huffv ./test/multi-input/sample_verification_key.json > ./test/multi-input/SampleVerifier.huff
 
 # Test sample Huff verification contracts against the Solidity version
 forge test -vvv

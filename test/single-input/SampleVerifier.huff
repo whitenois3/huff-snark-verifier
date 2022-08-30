@@ -12,11 +12,11 @@
 /// - [x] Don't store entire vkey in memory. Only store the ICs and codecopy other items in `PAIRING`.
 /// - [x] Make `PAIRING` macro work with multiple constraints.
 /// - [x] Restrict input pointer to 0xC0+n_ics*0x40+0x300
-/// - [ ] Tests for multi-constraint proofs & fail cases.
+/// - [x] Tests for multi-constraint proofs & fail cases.
 /// - [ ] Clean and update comments. (Double check stack comments)
-/// - [ ] Start optimizing and make a external template for `huffv` to use.
 /// - [ ] Optimizations.
 /// - [ ] Finish `huffv`.
+/// - [ ] External verification function template.
 /// - [ ] Huff tests.
 /// - [ ] Add documentation / README.
 
@@ -90,7 +90,7 @@
 /// @notice The location of the length of the public inputs in memory.
 #define constant PUB_INPUT_LEN_PTR = 0x540
 
-/// @notice The location of the input in memory.
+/// @notice The location of the public inputs in memory.
 #define constant PUB_INPUT_PTR = 0x560
 
 /// @notice The location of `vk_x`'s x component in memory
@@ -312,7 +312,6 @@
     // Store vk_x, gamma_2, @ 0x2c0
     [VK_X_X_PTR] mload            // [vk_x_0]
     0x2c0 mstore               // []
-    // TODO: No need to do this addition at runtime
     [VK_X_Y_PTR]                  // [VK_X_X_PTR + 0x20]
     mload                         // [vk_x_1]
     0x2e0 mstore               // []
@@ -421,7 +420,7 @@
 
             // Scalar mul IC[i + 1], input[i]
             [IC_PTR_SECOND]       // [ic_ptr_2, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            dup3 add              // [ic_ptr_2 + loop_offset, cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup3 0x02 mul add     // [ic_ptr_2 + loop_offset * 2, cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
 
             // Store scalar mul result in scratch space @ 0x00
             SCALAR_MUL()          // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
@@ -433,10 +432,10 @@
             0x20 add              // [loop_offset + 0x20, input_len, input_ptr + 0x20, snark_scalar]
 
             // Check if the loop is complete
-            // TODO: Fix this- input_len is a length and loop_offset is a mem offset. This
-            //       will cause problems when we start testing proofs with multiple ICs.
-            dup1 dup3             // [input_len, loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]  
-            gt                    // [input_len > loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup2                  // [input_len, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            0x20 dup3 div         // [loop_offset / 0x20, input_len, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            lt                    // [loop_offset / 0x20 < input_len, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+
             // Continue combination loop
             linear_combination jumpi
 
