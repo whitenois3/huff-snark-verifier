@@ -1,0 +1,64 @@
+/// Define literal function signatures, need to add tuple support for
+/// `function` definitions in huff-rs.
+#define constant NEGATE_SIG = 0xfb6b9e9a
+#define constant ADDITION_SIG = 0xd20decd2
+#define constant SCALAR_MUL_SIG = 0xa5e57a5e
+#define constant VERIFY_SIG = 0x2612907c
+
+#define macro NEGATE_WRAPPER() = {
+    // Copy the point into scratch space
+    0x40 0x04 0x00 calldatacopy
+    0x00 NEGATE()
+
+    0x40 0x00 return
+}
+
+#define macro ADDITION_WRAPPER() = {
+    // Copy the two points into scratch space
+    0x80 0x04 0x00 calldatacopy   // []
+
+    0x00 0x40                     // [0x40, 0x00]
+    ADDITION()                    // []
+
+    0x40 0x80 return
+}
+
+#define macro SCALAR_MUL_WRAPPER() = {
+    // Copy the point and scalar into scratch space
+    0x60 0x04 0x00 calldatacopy   // []
+
+    0x40 0x00                     // [0x00, 0x40]
+    SCALAR_MUL()                  // []
+
+    0x40 0x00 return
+}
+
+#define macro VERIFY_WRAPPER() = {
+    0x100 0x04 0x440 calldatacopy // []
+    0x124 calldatasize sub        // [cd_size - 0x124]
+    0x124                         // [0x124, cd_size - 0x124]
+    0x540 calldatacopy
+
+    VERIFY(0x440)                 // [is_valid_proof]
+    0x00 mstore                   // []
+    0x20 0x00 return
+}
+
+#define macro MAIN() = {
+    pc calldataload 0xE0 shr
+    dup1 [NEGATE_SIG] eq negate jumpi
+    dup1 [ADDITION_SIG] eq addition jumpi
+    dup1 [SCALAR_MUL_SIG] eq scalar_mul jumpi
+    dup1 [VERIFY_SIG] eq verify jumpi
+
+    0x00 dup1 revert
+
+    negate:
+        NEGATE_WRAPPER()
+    addition:
+        ADDITION_WRAPPER()
+    scalar_mul:
+        SCALAR_MUL_WRAPPER()
+    verify:
+        VERIFY_WRAPPER()
+}

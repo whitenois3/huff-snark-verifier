@@ -1,15 +1,3 @@
-//
-// Copyright 2017 Christian Reitwiessner
-// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-//
-// 2019 OKIMS
-//      ported to solidity 0.6
-//      fixed linter warnings
-//      added requiere error messages
-//
-//
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.4;
 library Pairing {
@@ -199,16 +187,21 @@ contract Verifier {
             [11502426145685875357967720478366491326865907869902181704031346886834786027007,
              21679208693936337484429571887537508926366191105267550375038502782696042114705]
         );
-        vk.IC = new Pairing.G1Point[](2);
+        vk.IC = new Pairing.G1Point[](3);
         
         vk.IC[0] = Pairing.G1Point( 
-            7939646427435313275674606050481033520858174308662984383866534038182445228260,
-            16447887016929030648668510941259053918121710383039614801052653744103275676945
+            2389439405195258690289909658280470845023400709866947251899301137489055824238,
+            16877117513734389620116641351942763119746236368036697180612124466702225353802
         );                                      
         
         vk.IC[1] = Pairing.G1Point( 
-            5743489099191728285113819936811211766343689300260789831199085715709505474874,
-            17509766565000264508242220371475836423427142317584180906970652935520780313728
+            21126805652074764040052300235419202795682248108331321588512433844780231854976,
+            8563141737561948886910803428712466832843704917724784711866327561784271537190
+        );                                      
+        
+        vk.IC[2] = Pairing.G1Point( 
+            19346635260615308214408713274507946513587809286585237108346781910851479851226,
+            5488440785079568670869272527731852887427344495978501510734090265496197396747
         );                                      
         
     }
@@ -236,7 +229,7 @@ contract Verifier {
             uint[2] memory a,
             uint[2][2] memory b,
             uint[2] memory c,
-            uint[1] memory input
+            uint[] memory input
         ) public view returns (bool r) {
         Proof memory proof;
         proof.A = Pairing.G1Point(a[0], a[1]);
