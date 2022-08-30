@@ -1,9 +1,11 @@
-# huff-snark-verifier
+<img align="right" width="150" height="150" top="100" src="./assets/no_step_on_snark.png">
+
+# huff-snark-verifier • [![ci](https://github.com/whitenois3/huff-snark-verifier/actions/workflows/ci.yaml/badge.svg)](https://github.com/whitenois3/huff-snark-verifier/actions/workflows/ci.yaml)
+
+> `huff-snark-verifier` offers an optimized Groth16 SNARK verification smart contract generator for EVM-based blockchains.
 
 > **Warning**
 > This software is experimental, and it has not been audited. Please proceed with caution, and report any bugs in the [Issues](https://github.com/whitenois3/huff-snark-verifier/issues).
-
-huff-snark-verifier offers a hyper-optimized Groth16 SNARK verification smart contract for EVM-based blockchains.
 
 ## Gas Report
 
