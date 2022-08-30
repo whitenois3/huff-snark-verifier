@@ -1,3 +1,4 @@
+/// SPDX-License-Identifier: GPL-3.0
 /// @title Huff Snark Verifier
 /// @notice A gas-optimized, purpose-driven snark verification contract.
 ///         This contract is based off of Verification.sol by Christian Reitwiessner.
@@ -205,7 +206,7 @@
 ///
 /// - SAFETY:
 ///      Overwrites scratch memory from [0x40:0x80]
-///      Overwrites vk_x in memory from [VK_X_X_PTR:VK_X_X_PTR+0x40]
+///      Overwrites vk_x in memory from [VK_X_X_PTR:(VK_X_X_PTR + 0x40)]
 #define macro ADDITION_2() = takes (1) {
     // Input stack:                  [ptr_a]
 
@@ -279,6 +280,9 @@
 /// @dev Because this macro is used *only* in the `VERIFY` macro the, inputs
 ///      to the `ecPairing` precompile are hard-coded.
 /// @return `is_valid_pair` true if pairs are valid, false if not.
+///
+/// - SAFETY:
+///     Overwrites pairing inputs in memory from [(0xC0 + n_ics * 0x40):(0xC0 + n_ics * 0x40 + 0x300)]
 #define macro PAIRING() = returns (1) {
     // Input stack:                  []
 
@@ -358,7 +362,7 @@
 
 /// @notice The verification key of the SNARK.
 /// @dev This value is filled by the `huffv` binary, and it is packed with no
-///      periphery information (i.e. "Alpha|Beta|Gamma|Delta|IC_len|IC").
+///      periphery information (i.e. "Alpha|Beta|Gamma|Delta|ICs").
 #define table VKEY {
     {{PACKED_VKEY}}
 }
@@ -366,7 +370,7 @@
 /// @notice Writes the ICs stored in the runtime code to memory at `ptr`
 ///
 /// - SAFETY:
-///     Overwrites memory from [0xC0:(0xC0+n_ics*0x40)]
+///     Overwrites memory from [0xC0:(0xC0 + n_ics * 0x40)]
 #define macro MSTORE_IC() = {
     // Input stack:                  []
 

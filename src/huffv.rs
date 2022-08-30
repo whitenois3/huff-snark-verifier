@@ -4,12 +4,11 @@ use clap::Parser;
 use ibig::IBig;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::fmt::Formatter;
-use std::fs::File;
+use std::fs;
 use std::path::Path;
 
 ////////////////////////////////////////////////////////////////
-//                         Constants                          //
+//                         CONSTANTS                          //
 ////////////////////////////////////////////////////////////////
 
 /// The Verifier template contract
@@ -34,7 +33,7 @@ pub struct HuffVerifier {
     /// If an output file is designated, the generator will save the verification
     /// contract to a file instead of sending it to stdout.
     #[clap(short = 'o', long = "output")]
-    source: Option<String>,
+    output: Option<String>,
 }
 
 /// A SNARK Verification Key.
@@ -97,7 +96,7 @@ impl VerificationKey {
 }
 
 impl fmt::Display for VerificationKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
@@ -124,7 +123,7 @@ fn main() {
                     contract = contract.replace("{{N_ICS}}", &format!("0x{:02x}", n_ics));
                     // Fill ic_bytes
                     contract = contract.replace("{{IC_BYTES}}", &format!("0x{:02x}", n_ics * 0x40));
-                                        
+
                     // Fill pairing input offsets
                     let pairing_input_offset = 0xC0 + n_ics * 0x40;
                     (0..PI_OFFSET_BASES.len()).for_each(|i| {
@@ -138,18 +137,26 @@ fn main() {
                     // Fill public input offsets
                     let input_ptr = pairing_input_offset + 0x300;
                     // Fill pub_input_len_ptr constant
-                    contract = contract.replace("{{PUB_INPUT_LEN_PTR}}", &format!("0x{:02x}", input_ptr + 0x100));
+                    contract = contract.replace(
+                        "{{PUB_INPUT_LEN_PTR}}",
+                        &format!("0x{:02x}", input_ptr + 0x100),
+                    );
                     // Fill pub_input_ptr constant
-                    contract = contract.replace("{{PUB_INPUT_PTR}}", &format!("0x{:02x}", input_ptr + 0x120));
+                    contract = contract
+                        .replace("{{PUB_INPUT_PTR}}", &format!("0x{:02x}", input_ptr + 0x120));
                     (0..8).for_each(|i| {
                         let tag = format!("{{{{in_{}}}}}", i);
-                        contract = contract.replace(
-                            &tag,
-                            &format!("0x{:02x}", input_ptr + i * 0x20)
-                        );
+                        contract =
+                            contract.replace(&tag, &format!("0x{:02x}", input_ptr + i * 0x20));
                     });
 
-                    println!("{}", contract);
+                    // Write output to file or print it to stdout
+                    if let Some(output) = args.output {
+                        fs::write(&output, contract).expect("Failed to write contract to file.");
+                        println!("Saved generated contract to {}", output);
+                    } else {
+                        println!("{}", contract);
+                    }
                 }
                 Err(e) => eprintln!("{}", e),
             }
@@ -162,12 +169,12 @@ fn main() {
 }
 
 ////////////////////////////////////////////////////////////////
-//                      Helper Functions                      //
+//                      HELPER FUNCTIONS                      //
 ////////////////////////////////////////////////////////////////
 
 /// Parses a verification key from a file path.
 fn parse_verification_key(path: &Path) -> Result<VerificationKey, &'static str> {
-    if let Ok(contents) = File::open(path) {
+    if let Ok(contents) = fs::File::open(path) {
         Ok(serde_json::from_reader(contents)
             .expect("Error while deserializing verification key JSON."))
     } else {

@@ -1,3 +1,4 @@
+/// SPDX-License-Identifier: GPL-3.0
 /// @title Huff Snark Verifier
 /// @notice A gas-optimized, purpose-driven snark verification contract.
 ///         This contract is based off of Verification.sol by Christian Reitwiessner.
@@ -447,4 +448,3 @@
 
     // Return stack:                 [is_valid_pair]
 }
-
