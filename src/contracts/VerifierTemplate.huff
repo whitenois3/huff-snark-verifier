@@ -136,7 +136,7 @@
 ///         64 byte result to memory @ VK_X_X_PTR (0x80).
 /// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes).
 /// @param `ptr_b` - Memory pointer to the input point `b` (64 bytes).
-/// 
+///
 /// - SAFETY:
 ///      Overwrites scratch memory from [0x00:0x80]
 ///      Overwrites vk_x in memory from [VK_X_X_PTR:VK_X_X_PTR+0x40]
@@ -163,7 +163,7 @@
 
     // The `ADDITION` macro is *only* used for the linear combination on the
     // vk_x g1 point in the `VERIFY` macro. Because of this, the output memory
-    // location of the staticcall is hardcoded to 0x80. 
+    // location of the staticcall is hardcoded to 0x80.
     0x40 [VK_X_X_PTR]             // [VK_X_X_PTR, 0x40]
     dup1 0x00                     // [0x00, 0x80, VK_X_X_PTR, 0x40]
     // TODO: Sub 2000 from gas / add invalid op on failure?
@@ -181,13 +181,13 @@
 
 /// @notice Calls the ecAdd precompile with the G1 points `a` and `b`. Writes
 ///         64 byte result to memory @ VK_X_X_PTR (0x80).
-///      
+///
 ///         This macro is a secondary version of `ADDITION` that is only used in the
 ///         linear combination loop. The result of a `SCALAR_MUL` call is always
 ///         the second operand of the `ADDITION` call within the loop, and we
 ///         use this macro so that we don't have to re-store the `SCALAR_MUL`
 ///         result in scratch space.
-/// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes). 
+/// @param `ptr_a` - Memory pointer to the input point `a` (64 bytes).
 ///
 /// - SAFETY:
 ///      Overwrites scratch memory from [0x40:0x80]

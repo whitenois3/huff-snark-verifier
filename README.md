@@ -18,7 +18,7 @@
 
 ## Usage
 
-To generate a Huff SNARK verification contract, you must first have a verification key created by [snarkjs](https://github.com/iden3/snarkjs).
+To generate a Huff SNARK verification contract, you must first have a verification key created by [snarkjs](https://github.com/iden3/snarkjs). Note: this is a rather lengthy process well-documented in the snarkjs github repository [readme](https://github.com/iden3/snarkjs#preliminaries).
 
 1. Install `huffv` (Requires the [rust toolchain](https://www.rust-lang.org/tools/install) to be installed.)
 

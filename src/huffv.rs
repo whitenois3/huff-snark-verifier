@@ -173,16 +173,18 @@ fn main() {
 ////////////////////////////////////////////////////////////////
 
 /// Parses a verification key from a file path.
-fn parse_verification_key(path: &Path) -> Result<VerificationKey, &'static str> {
-    if let Ok(contents) = fs::File::open(path) {
-        Ok(serde_json::from_reader(contents)
-            .expect("Error while deserializing verification key JSON."))
-    } else {
-        Err("Error reading file contents!")
-    }
+fn parse_verification_key(path: &Path) -> Result<VerificationKey, String> {
+    fs::File::open(path)
+        .map_err(|_| format!("Error reading file contents at: \"{}\"", path.to_string_lossy()))
+        .and_then(|p| serde_json::from_reader(p).map_err(|_| String::from("Error deserializing the provided verification key JSON")))
 }
 
 /// Encodes a string that contains a 256 bit decimal number as a 32 byte hex string
+///
+/// # Panics
+///
+/// Panics if the input is not between length 2 and 36 inclusive, following the radix string parsing from the [IBig](https://docs.rs/ibig/) crate.
+///
 fn encode_num(n: &str) -> String {
     let num = IBig::from_str_radix(n, 10).expect("Failed to parse verification key.");
     let mut encoded = num.in_radix(16).to_string();
