@@ -25,12 +25,12 @@ contract VerifierTest is Test {
 
     function setUp() public {
         // Instantiate Single Input Verifiers
-        string memory single_input_wrapper = vm.readFile("test/single-input/SingleInputWrapper.huff");
+        string memory single_input_wrapper = vm.readFile("./test/single-input/SingleInputWrapper.huff");
         huffSingleInputVerifier = IHuffVerifier(HuffDeployer.deploy_with_code("../test/single-input/SampleVerifier", single_input_wrapper));
         solSingleInputVerifier = new SingleInputVerifier();
 
         // Instantiate Multi Input Verifiers
-        string memory multi_input_wrapper = vm.readFile("test/multi-input/MultiInputWrapper.huff");
+        string memory multi_input_wrapper = vm.readFile("./test/multi-input/MultiInputWrapper.huff");
         huffMultiInputVerifier = IHuffVerifier(HuffDeployer.deploy_with_code("../test/multi-input/SampleVerifier", multi_input_wrapper));
         solMultiInputVerifier = new MultiInputVerifier();
     }

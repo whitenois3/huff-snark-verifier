@@ -166,8 +166,9 @@
     // location of the staticcall is hardcoded to 0x80. 
     0x40 [VK_X_X_PTR]             // [VK_X_X_PTR, 0x40]
     dup1 0x00                     // [0x00, 0x80, VK_X_X_PTR, 0x40]
-    // TODO: Sub 2000 from gas / add invalid op on failure?
-    [EC_ADD] gas                  // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
+    [EC_ADD]                      // [ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
+    // TODO: Is there actually a need to sub 2000 gas here?
+    0x96                          // [gas (150), ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
     staticcall                    // [success]
     continue jumpi                // []
 
@@ -207,11 +208,11 @@
 
     // The `ADDITION_2` macro is *only* used for the linear combination on the
     // vk_x g1 point in the `VERIFY` macro. Because of this, the output memory
-    // location of the staticcall is hardcoded to 0x80. 
+    // location of the staticcall is hardcoded to 0x80 (VK_X_X_PTR). 
     0x40 [VK_X_X_PTR]             // [VK_X_X_PTR, 0x40]
     dup1 0x00                     // [0x00, 0x80, VK_X_X_PTR, 0x40]
-    // TODO: Sub 2000 from gas / add invalid op on failure?
-    [EC_ADD] gas                  // [gas, ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
+    [EC_ADD]                      // [ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
+    0x96                          // [gas (150), ec_add_precompile, out_ptr, 0x80, out_ptr, 0x40]
     staticcall                    // [success]
     continue jumpi                // []
 
@@ -244,8 +245,8 @@
 
     0x40 0x00                     // [0x00, 0x40]
     0x60 dup2                     // [0x00, 0x60, 0x00, 0x40]
-    // TODO: Sub 2000 from gas / add invalid op on failure?
-    [EC_MUL] gas                  // [gas, ec_mul_precompile, out_ptr, 0x60, out_ptr, 0x40]
+    [EC_MUL]                      // [ec_mul_precompile, out_ptr, 0x60, out_ptr, 0x40]
+    0x1770                        // [gas (6000), ec_mul_precompile, out_ptr, 0x60, out_ptr, 0x40]
     staticcall                    // [success]
     continue jumpi                // []
 
@@ -325,7 +326,8 @@
 
     0x20 0x00                     // [0x00, 0x20]
     0x300 0x140                // [pi_0, 0x300, 0x00, 0x20]
-    [EC_PAIR] gas                 // [gas, ec_pairing_precompile, pi_0, 0x300, 0x00, 0x20]
+    [EC_PAIR]                     // [ec_pairing_precompile, pi_0, 0x300, 0x00, 0x20]
+    0x2C308                       // [gas (181000), ec_pairing_precompile, pi_0, 0x300, 0x00, 0x20]
     staticcall                    // [success]
     continue jumpi                // []
 
@@ -435,3 +437,4 @@
 
     // Return stack:                 [is_valid_pair]
 }
+

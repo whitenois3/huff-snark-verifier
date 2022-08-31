@@ -12,9 +12,9 @@
 | VERSION             | GAS CONSUMED |
 | ------------------- | ------------ |
 | Solidity (1 input)  | 207009       |
-| Huff (1 input)      | 188765       |
+| Huff (1 input)      | 188769       |
 | Solidity (2 inputs) | 215009       |
-| Huff (2 inputs)     | 195362       |
+| Huff (2 inputs)     | 195368       |
 
 ## Usage
 
