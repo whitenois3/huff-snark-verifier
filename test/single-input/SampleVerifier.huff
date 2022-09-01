@@ -396,43 +396,44 @@
     start_verify:
         // Compute the linear combination vk_x
         [PUB_INPUT_PTR]           // [input_ptr, snark_scalar]
-        [PUB_INPUT_LEN_PTR] mload // [input_len, input_ptr + 0x20, snark_scalar]
-        0x00                      // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+        [PUB_INPUT_LEN_PTR] mload // [input_len, input_ptr, snark_scalar]
+        0x00                      // [loop_index, input_len, input_ptr, snark_scalar]
         linear_combination:
             // Load input[i] onto the stack
-            dup1 dup4 add         // [input_ptr + 0x20 + loop_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            dup1 mload            // [input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup1 0x20 mul         // [loop_index * 0x20, loop_index, input_len, input_ptr, snark_scalar]
+            dup4 add              // [input_ptr + loop_index * 0x20, loop_index, input_len, input_ptr, snark_scalar]
+            dup5                  // [snark_scalar, input_ptr + loop_index * 0x20, loop_index, input_len, input_ptr, snark_scalar]
+            dup2 mload            // [input[i], snark_scalar, cur_input_offset, loop_index, input_len, input_ptr, snark_scalar]
 
             // require(input[i] < snark_scalar)
-            dup6                  // [snark_scalar, input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            gt iszero             // [snark_scalar <= input[i], cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            fail jumpi            // [cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            gt                    // [input[i] > snark_scalar, cur_input_offset, loop_index, input_len, input_ptr, snark_scalar]
+            fail jumpi            // [cur_input_offset, loop_index, input_len, input_ptr, snark_scalar]
 
             // Scalar mul IC[i + 1], input[i]
-            [IC_PTR_SECOND]       // [ic_ptr_2, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            dup3 0x02 mul add     // [ic_ptr_2 + loop_offset * 2, cur_input_offset, cur_input_offset, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            [IC_PTR_SECOND]              // [ic_ptr, cur_input_offset, loop_index, input_len, input_ptr, snark_scalar]
+            dup3 0x40 mul add     // [ic_ptr + loop_index + 0x40, cur_input_offset, loop_index, input_len, input_ptr, snark_scalar]
 
             // Store scalar mul result in scratch space @ 0x00
-            SCALAR_MUL()          // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            SCALAR_MUL()          // [loop_index, input_len, input_ptr, snark_scalar]
 
-            [VK_X_X_PTR]          // [VK_X_X_PTR, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            ADDITION_2()          // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            [VK_X_X_PTR]          // [VK_X_X_PTR, loop_index, input_len, input_ptr, snark_scalar]
+            ADDITION_2()          // [loop_index, input_len, input_ptr, snark_scalar]
 
             // Increase loop offset
-            0x20 add              // [loop_offset + 0x20, input_len, input_ptr + 0x20, snark_scalar]
+            0x01 add              // [loop_index + 0x01, input_len, input_ptr, snark_scalar]
 
             // Check if the loop is complete
-            dup2                  // [input_len, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            0x20 dup3 div         // [loop_offset / 0x20, input_len, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            lt                    // [loop_offset / 0x20 < input_len, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            dup2                  // [input_len, loop_index, input_len, input_ptr, snark_scalar]
+            dup2                  // [loop_index, input_len, loop_index, input_len, input_ptr, snark_scalar]
+            lt                    // [loop_index < input_len, loop_index, input_len, input_ptr, snark_scalar]
 
             // Continue combination loop
             linear_combination jumpi
 
             // Add the point in IC[0] to `vk_x`
-            [IC_PTR]              // [ic_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            [VK_X_X_PTR]          // [VK_X_X_PTR, ic_ptr, loop_offset, input_len, input_ptr + 0x20, snark_scalar]
-            ADDITION()            // [loop_offset, input_len, input_ptr + 0x20, snark_scalar]
+            [IC_PTR]              // [ic_ptr, loop_index, input_len, input_ptr, snark_scalar]
+            [VK_X_X_PTR]          // [VK_X_X_PTR, ic_ptr, loop_index, input_len, input_ptr, snark_scalar]
+            ADDITION()            // [loop_index, input_len, input_ptr, snark_scalar]
             PAIRING()             // [is_valid_pair]
 
     // Return stack:                 [is_valid_pair]

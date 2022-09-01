@@ -12,9 +12,9 @@
 | VERSION             | GAS CONSUMED |
 | ------------------- | ------------ |
 | Solidity (1 input)  | 207009       |
-| Huff (1 input)      | 188769       |
+| Huff (1 input)      | 188766       |
 | Solidity (2 inputs) | 215009       |
-| Huff (2 inputs)     | 195368       |
+| Huff (2 inputs)     | 195362       |
 
 ## Usage
 
@@ -46,11 +46,8 @@ To run tests for this repo, you will need [forge](https://github.com/foundry-rs/
 [huffc](https://github.com/huff-language/huff-rs), and the [rust toolchain](https://www.rust-lang.org/tools/install) installed.
 
 ```sh
-# Regenerate single-input verification contract from template
-cargo run --bin huffv ./test/single-input/sample_verification_key.json -o ./test/single-input/SampleVerifier.huff
-
-# Regenerate multi-input verification contract from template
-cargo run --bin huffv ./test/multi-input/sample_verification_key.json -o ./test/multi-input/SampleVerifier.huff
+# Regenerate test contracts
+make tests
 
 # Test sample Huff verification contracts against the Solidity version
 forge test -vvv
@@ -64,10 +61,8 @@ You can test your changes to the template contract by regenerating the single-in
 
 ### To Do
 
-- [x] Don't store entire vkey in memory. Only store the ICs and codecopy other items in `PAIRING`.
-- [x] Make `PAIRING` macro work with multiple public inputs.
-- [x] Restrict input pointer to `0x3C0 + n_ics * 0x40` in memory.
 - [x] Tests for proofs with multiple inputs & fail cases.
+  - [ ] Would like a few more tests here with circuits that have more public inputs.
 - [x] Finish `huffv`.
   - [ ] Possibly use the [handlebars crate](https://crates.io/crates/handlebars) instead of `.replace`?
 - [ ] External verification function template.
