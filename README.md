@@ -64,11 +64,11 @@ You can test your changes to the template contract by regenerating the single-in
 - [x] Tests for proofs with multiple inputs & fail cases.
   - [ ] Would like a few more tests here with circuits that have more public inputs.
 - [x] Finish `huffv`.
-  - [ ] Possibly use the [handlebars crate](https://crates.io/crates/handlebars) instead of `.replace`?
+  - [ ] Possibly clean up with the [handlebars crate](https://crates.io/crates/handlebars) instead of `.replace`?
 - [ ] External verification function template.
 - [x] Add documentation / README.
 - [ ] Clean and update comments. (Double check stack comments!)
-- [ ] Optimizations.
+- [ ] More runtime gas / code size optimizations.
 
 ## License
 
