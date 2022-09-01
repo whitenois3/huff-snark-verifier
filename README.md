@@ -64,16 +64,14 @@ You can test your changes to the template contract by regenerating the single-in
 
 ### To Do
 
-- [x] Don't store entire vkey in memory. Only store the ICs and codecopy other items in `PAIRING`.
-- [x] Make `PAIRING` macro work with multiple public inputs.
-- [x] Restrict input pointer to `0x3C0 + n_ics * 0x40` in memory.
 - [x] Tests for proofs with multiple inputs & fail cases.
+  - [ ] More tests for circuits with more public inputs.
 - [x] Finish `huffv`.
-  - [ ] Possibly use the [handlebars crate](https://crates.io/crates/handlebars) instead of `.replace`?
+  - [ ] Possibly clean up with the [handlebars crate](https://crates.io/crates/handlebars) instead of `.replace`?
 - [ ] External verification function template.
 - [x] Add documentation / README.
 - [ ] Clean and update comments. (Double check stack comments!)
-- [ ] Optimizations.
+- [ ] More runtime gas / code size optimizations.
 
 ## License
 
