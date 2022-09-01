@@ -4,3 +4,7 @@ out = 'out'
 libs = ['lib']
 fuzz_runs = 4096
 ffi = true
+fs_permissions = [
+    { access = "read", path = "./test/multi-input/MultiInputWrapper.huff" },
+    { access = "read", path = "./test/single-input/SingleInputWrapper.huff" }
+]
