@@ -400,7 +400,7 @@
         0x00                      // [loop_index, input_len, input_ptr, snark_scalar]
         linear_combination:
             // Load input[i] onto the stack
-            dup1 0x20 mul         // [loop_index * 0x20, loop_index, input_len, input_ptr, snark_scalar]
+            dup1 0x05 shl         // [loop_index * 0x20, loop_index, input_len, input_ptr, snark_scalar]
             dup4 add              // [input_ptr + loop_index * 0x20, loop_index, input_len, input_ptr, snark_scalar]
             dup5                  // [snark_scalar, cur_input_offset, loop_index, input_len, input_ptr, snark_scalar]
             dup2 mload            // [input[i], snark_scalar, cur_input_offset, loop_index, input_len, input_ptr, snark_scalar]
@@ -411,7 +411,7 @@
 
             // Scalar mul IC[i + 1], input[i]
             [IC_PTR_SECOND]              // [ic_ptr, cur_input_offset, loop_index, input_len, input_ptr, snark_scalar]
-            dup3 0x40 mul add     // [ic_ptr + loop_index + 0x40, cur_input_offset, loop_index, input_len, input_ptr, snark_scalar]
+            dup3 0x06 shl add     // [ic_ptr + loop_index + 0x40, cur_input_offset, loop_index, input_len, input_ptr, snark_scalar]
 
             // Store scalar mul result in scratch space @ 0x00
             SCALAR_MUL()          // [loop_index, input_len, input_ptr, snark_scalar]
